@@ -35,10 +35,9 @@
 
     <h1>Planificateur de Cibles SkyHopper</h1>
 
-    <div id="importCard" class="card" style="border: 1px solid #ff5252;">
-        <h2>Chargement du Catalogue NGC</h2>
-        <p id="dbStatus">Aucune base détectée. Veuillez sélectionner votre fichier <b>NGC.csv</b> (une seule fois) :</p>
-        <input type="file" id="csvFileInput" accept=".csv">
+    <div class="card" style="border: 1px solid #444;">
+        <h2>Catalogue NGC</h2>
+        <p id="dbStatus">Chargement du catalogue en cours...</p>
     </div>
 
     <div class="card">
@@ -130,7 +129,7 @@
                 </tr>
             </thead>
             <tbody id="targetList">
-                <tr><td colspan="10">Chargez le fichier CSV ci-dessus puis lancez le calcul.</td></tr>
+                <tr><td colspan="10">Chargement du catalogue en cours...</td></tr>
             </tbody>
         </table>
     </div>
@@ -148,7 +147,6 @@
 
             const now = new Date();
 
-            // Générer jours (1 à 31)
             daySelect.innerHTML = '';
             for (let i = 1; i <= 31; i++) {
                 const opt = document.createElement('option');
@@ -157,7 +155,6 @@
                 daySelect.appendChild(opt);
             }
 
-            // Générer années (année courante + 2 ans)
             yearSelect.innerHTML = '';
             const currentYear = now.getFullYear();
             for (let i = currentYear; i <= currentYear + 2; i++) {
@@ -167,44 +164,38 @@
                 yearSelect.appendChild(opt);
             }
 
-            // Valeurs par défaut = aujourd'hui
             daySelect.value = now.getDate();
             monthSelect.value = now.getMonth();
             yearSelect.value = currentYear;
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
             initDateSelector();
 
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
                 allTargets = JSON.parse(localData);
-                document.getElementById('dbStatus').innerHTML = `<b> Base prête !</b> (${allTargets.length} objets en cache local).`;
+                document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets chargés depuis le cache).`;
                 document.getElementById('dbStatus').style.color = '#4caf50';
-            }
-        });
-
-        document.getElementById('csvFileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            document.getElementById('dbStatus').innerText = "Analyse du fichier en cours...";
-
-            reader.onload = function(evt) {
-                const csvText = evt.target.result;
-                allTargets = parseOpenNGC(csvText);
-
+                recalculate();
+            } else {
+                document.getElementById('dbStatus').innerText = "Téléchargement automatique du catalogue NGC depuis le serveur...";
                 try {
+                    const response = await fetch('NGC.csv');
+                    if (!response.ok) throw new Error("Fichier introuvable sur le serveur");
+                    const csvText = await response.text();
+                    
+                    allTargets = parseOpenNGC(csvText);
                     localStorage.setItem('skyhopper_ngc_db', JSON.stringify(allTargets));
-                    document.getElementById('dbStatus').innerHTML = `<b> Succès !</b> ${allTargets.length} objets sauvegardés dans votre navigateur.`;
+                    
+                    document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets téléchargés et mis en cache).`;
                     document.getElementById('dbStatus').style.color = '#4caf50';
-                } catch(err) {
-                    document.getElementById('dbStatus').innerText = `${allTargets.length} objets chargés en mémoire (stockage local saturé).`;
+                    recalculate();
+                } catch (err) {
+                    document.getElementById('dbStatus').innerHTML = `<b>Erreur :</b> Impossible de charger automatiquement le fichier NGC.csv (${err.message}). Vérifiez qu'il est bien présent dans le dépôt.`;
+                    document.getElementById('dbStatus').style.color = '#f44336';
                 }
-            };
-
-            reader.readAsText(file);
+            }
         });
 
         function parseOpenNGC(csvText) {
@@ -487,7 +478,7 @@
 
         function calculateVisibleTargets() {
             if (allTargets.length === 0) {
-                alert("Veuillez d'abord sélectionner le fichier NGC.csv en haut de la page.");
+                alert("Le catalogue n'est pas encore chargé, veuillez patienter quelques secondes.");
                 return;
             }
 
