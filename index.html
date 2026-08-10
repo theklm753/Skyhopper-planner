@@ -192,7 +192,7 @@
                 if (data && data.length > 0) {
                     userLat = parseFloat(data[0].lat);
                     userLon = parseFloat(data[0].lon);
-                    const displayName = data[0].display_name.split(',')[0]; // Garde le nom principal
+                    const displayName = data[0].display_name.split(',')[0];
                     
                     statusEl.innerHTML = `Lieu actif : <b>${displayName}</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
                     statusEl.style.color = "#4caf50";
@@ -207,27 +207,52 @@
             }
         }
 
-        function triggerGeo() {
+        async function triggerGeo() {
             const statusEl = document.getElementById('locationStatus');
-            if (navigator.geolocation) {
-                statusEl.innerText = "Géolocalisation GPS en cours...";
-                statusEl.style.color = "#ffa000";
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        userLat = pos.coords.latitude;
-                        userLon = pos.coords.longitude;
-                        statusEl.innerHTML = `Lieu actif : <b>Position GPS actuelle</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
-                        statusEl.style.color = "#4caf50";
-                        recalculate();
-                    },
-                    (err) => {
-                        statusEl.innerText = "Erreur GPS. Vérifiez vos autorisations.";
-                        statusEl.style.color = "#f44336";
-                    }
-                );
-            } else {
+            const searchInput = document.getElementById('citySearch');
+
+            if (!navigator.geolocation) {
                 alert("La géolocalisation n'est pas supportée par votre navigateur.");
+                return;
             }
+
+            statusEl.innerText = "Acquisition du signal GPS...";
+            statusEl.style.color = "#ffa000";
+
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    userLat = pos.coords.latitude;
+                    userLon = pos.coords.longitude;
+
+                    statusEl.innerText = "Recherche de votre adresse exacte...";
+
+                    try {
+                        // Géocodage inversé pour retrouver le nom de la ville via les coordonnées GPS
+                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${userLat}&lon=${userLon}`);
+                        const data = await response.json();
+
+                        let placeName = "Position GPS actuelle";
+                        if (data && data.address) {
+                            placeName = data.address.city || data.address.town || data.address.village || data.address.municipality || "Position GPS";
+                        }
+
+                        // Remplace le texte dans la barre de recherche et actualise le statut
+                        searchInput.value = placeName;
+                        statusEl.innerHTML = `Lieu actif : <b>${placeName}</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
+                        statusEl.style.color = "#4caf50";
+                    } catch (e) {
+                        searchInput.value = "GPS Actuel";
+                        statusEl.innerHTML = `Lieu actif : <b>GPS</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
+                        statusEl.style.color = "#4caf50";
+                    }
+
+                    recalculate();
+                },
+                (err) => {
+                    statusEl.innerText = "Erreur GPS. Vérifiez vos autorisations.";
+                    statusEl.style.color = "#f44336";
+                }
+            );
         }
 
         function getSolarSystemBodies(date) {
@@ -243,7 +268,7 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             initDateSelector();
-            searchCity(); // Lance la recherche par défaut pour "Brest"
+            searchCity();
 
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
