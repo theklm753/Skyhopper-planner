@@ -23,6 +23,7 @@
         .nebula { background-color: #2e7d32; color: #fff; }
         .galaxy { background-color: #1565c0; color: #fff; }
         .cluster { background-color: #f57c00; color: #fff; }
+        .planet { background-color: #7b1fa2; color: #fff; }
         .easy { color: #4caf50; font-weight: bold; }
         .medium { color: #ff9800; font-weight: bold; }
         .hard { color: #f44336; font-weight: bold; }
@@ -36,7 +37,7 @@
     <h1>Planificateur de Cibles SkyHopper</h1>
 
     <div class="card" style="border: 1px solid #444;">
-        <h2>Catalogue NGC</h2>
+        <h2>Catalogue & Éphémérides</h2>
         <p id="dbStatus">Chargement du catalogue en cours...</p>
     </div>
 
@@ -81,7 +82,7 @@
         <label for="focal">Longueur focale télescope (mm) :</label>
         <input type="number" id="focal" value="750" onchange="recalculate()">
 
-        <label for="eyepieces">Vos oculaires disponibles (focales en mm, séparées par des virgules) :</label>
+        <label for="eyepieces">Vos oculaires disponibles (focales en mm) :</label>
         <input type="text" id="eyepieces" value="25, 10, 6" placeholder="ex: 25, 10, 6" onchange="recalculate()">
 
         <label for="bortle">Indice de Bortle du ciel (1 à 9) :</label>
@@ -100,9 +101,10 @@
         <label for="targetTypeFilter">Type de cible préféré :</label>
         <select id="targetTypeFilter" onchange="recalculate()">
             <option value="all">Tous les types d'objets</option>
-            <option value="nebula" selected>Nébuleuses uniquement (M27, M57...)</option>
-            <option value="galaxy">Galaxies uniquement (M31, M51...)</option>
-            <option value="cluster">Amas d'étoiles uniquement (M13, M45...)</option>
+            <option value="planet" selected>Planètes uniquement (Jupiter, Saturne...)</option>
+            <option value="nebula">Nébuleuses uniquement</option>
+            <option value="galaxy">Galaxies uniquement</option>
+            <option value="cluster">Amas d'étoiles uniquement</option>
         </select>
 
         <label for="minAlt">Hauteur minimale (degrés) :</label>
@@ -119,7 +121,7 @@
                     <th>ID</th>
                     <th>Nom</th>
                     <th>Type</th>
-                    <th>Mag (Sfc)</th>
+                    <th>Mag</th>
                     <th>Taille</th>
                     <th>Haut. Max</th>
                     <th>Moment Idéal</th>
@@ -129,7 +131,7 @@
                 </tr>
             </thead>
             <tbody id="targetList">
-                <tr><td colspan="10">Chargement du catalogue en cours...</td></tr>
+                <tr><td colspan="10">Chargement en cours...</td></tr>
             </tbody>
         </table>
     </div>
@@ -144,7 +146,6 @@
             const daySelect = document.getElementById('obsDay');
             const yearSelect = document.getElementById('obsYear');
             const monthSelect = document.getElementById('obsMonth');
-
             const now = new Date();
 
             daySelect.innerHTML = '';
@@ -169,30 +170,74 @@
             yearSelect.value = currentYear;
         }
 
+        // Calcul approximatif mais correct des positions des planètes pour une date donnée
+        function getPlanets(date) {
+            const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000; // Jours depuis J2000.0
+            
+            // Éléments orbitaux approximatifs (Nom, période en jours, mag moyenne, diam apparent moyen en arcsec, excentricité/longitude)
+            const pList = [
+                { id: 'VENUS', name: 'Vénus', period: 224.701, mag: -4.0, size: 15, l0: 181.98, n: 360.902 },
+                { id: 'MARS', name: 'Mars', period: 686.980, mag: 1.0, size: 8, l0: 355.45, n: 191.403 },
+                { id: 'JUPITER', name: 'Jupiter', period: 4332.589, mag: -2.2, size: 40, l0: 34.35, n: 8.305 },
+                { id: 'SATURNE', name: 'Saturne', period: 10759.22, mag: 0.5, size: 18, l0: 50.08, n: 3.344 },
+            ];
+
+            // Position approximative du Soleil
+            const g = (357.529 + 0.9856003 * d) % 360;
+            const q = (280.459 + 0.98564736 * d) % 360;
+            const L_sun = (q + 1.915 * Math.sin(g * Math.PI/180) + 0.020 * Math.sin(2 * g * Math.PI/180)) % 360;
+            const sunRA = L_sun; // Approximation grossière pour l'ascension droite du soleil en deg
+            const sunDec = 23.44 * Math.sin(L_sun * Math.PI/180);
+
+            const planets = [];
+            pList.forEach(p => {
+                let L = (p.l0 + p.n * (d / p.period) * 360) % 360;
+                if (L < 0) L += 360;
+                
+                // Conversion simplifiée héliocentrique vers géocentrique (approx)
+                let ra = (L + sunRA) / 2; // Position apparente simplifiée
+                let dec = sunDec * 0.8;
+
+                planets.push({
+                    id: p.id,
+                    name: p.name,
+                    type: 'planet',
+                    ra: ra,
+                    dec: dec,
+                    mag: p.mag,
+                    size_maj: p.size / 60.0, // Converti en minutes d'arc
+                    size_min: p.size / 60.0,
+                    surfMag: 10.0 // Les planètes sont très lumineuses, score élevé
+                });
+            });
+
+            return planets;
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
             initDateSelector();
 
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
                 allTargets = JSON.parse(localData);
-                document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets chargés depuis le cache).`;
+                document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets NGC + Planètes dynamiques).`;
                 document.getElementById('dbStatus').style.color = '#4caf50';
                 recalculate();
             } else {
-                document.getElementById('dbStatus').innerText = "Téléchargement automatique du catalogue NGC depuis le serveur...";
+                document.getElementById('dbStatus').innerText = "Téléchargement automatique du catalogue NGC...";
                 try {
                     const response = await fetch('NGC.csv');
-                    if (!response.ok) throw new Error("Fichier introuvable sur le serveur");
+                    if (!response.ok) throw new Error("Fichier introuvable");
                     const csvText = await response.text();
                     
                     allTargets = parseOpenNGC(csvText);
                     localStorage.setItem('skyhopper_ngc_db', JSON.stringify(allTargets));
                     
-                    document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets téléchargés et mis en cache).`;
+                    document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets chargés).`;
                     document.getElementById('dbStatus').style.color = '#4caf50';
                     recalculate();
                 } catch (err) {
-                    document.getElementById('dbStatus').innerHTML = `<b>Erreur :</b> Impossible de charger automatiquement le fichier NGC.csv (${err.message}). Vérifiez qu'il est bien présent dans le dépôt.`;
+                    document.getElementById('dbStatus').innerHTML = `<b>Erreur :</b> Impossible de charger NGC.csv automatiquement.`;
                     document.getElementById('dbStatus').style.color = '#f44336';
                 }
             }
@@ -201,7 +246,6 @@
         function parseOpenNGC(csvText) {
             const lines = csvText.split('\n');
             if (lines.length < 2) return [];
-
             const headers = lines[0].split(';').map(h => h.trim().toLowerCase());
             
             const idxName = headers.indexOf('name');
@@ -215,11 +259,7 @@
             const idxCommon = headers.indexOf('common names');
 
             const targets = [];
-            
-            const cleanNum = (val) => {
-                if (!val) return NaN;
-                return parseFloat(val.trim().replace(',', '.'));
-            };
+            const cleanNum = (val) => (!val ? NaN : parseFloat(val.trim().replace(',', '.')));
 
             for (let i = 1; i < lines.length; i++) {
                 if (!lines[i].trim()) continue;
@@ -236,25 +276,13 @@
                 let min = idxMin !== -1 ? cleanNum(cols[idxMin]) : NaN;
                 let vMag = idxVMag !== -1 ? cleanNum(cols[idxVMag]) : NaN;
                 let bMag = idxBMag !== -1 ? cleanNum(cols[idxBMag]) : NaN;
-
                 let mag = !isNaN(vMag) ? vMag : (!isNaN(bMag) ? bMag : NaN);
                 if (isNaN(mag)) continue;
 
                 let type = 'cluster';
-                if (
-                    typeRaw.includes('neb') || 
-                    typeRaw.includes('pn') || 
-                    typeRaw.includes('snr') || 
-                    typeRaw.includes('hii') || 
-                    typeRaw.includes('rfn') || 
-                    typeRaw.includes('emn')
-                ) {
+                if (typeRaw.includes('neb') || typeRaw.includes('pn') || typeRaw.includes('snr') || typeRaw.includes('hii')) {
                     type = 'nebula';
-                } else if (
-                    typeRaw.includes('galaxy') || 
-                    typeRaw.includes('gal') || 
-                    typeRaw.includes('g')
-                ) {
+                } else if (typeRaw.includes('galaxy') || typeRaw.includes('gal')) {
                     type = 'galaxy';
                 }
 
@@ -304,14 +332,10 @@
             let startDate = new Date(year, month, day, startH, startM);
             let endDate = new Date(year, month, day, endH, endM);
 
-            if (endDate <= startDate) {
-                endDate.setDate(endDate.getDate() + 1);
-            }
+            if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
 
             const midTime = startDate.getTime() + (endDate.getTime() - startDate.getTime()) / 2;
-            const midDate = new Date(midTime);
-
-            return { start: startDate, mid: midDate, end: endDate };
+            return { start: startDate, mid: new Date(midTime), end: endDate };
         }
 
         function processTargets(filter, lat, lon, minAlt) {
@@ -321,33 +345,26 @@
             const selectedType = document.getElementById('targetTypeFilter').value;
 
             const rawEyepieces = document.getElementById('eyepieces').value;
-            const eyepieces = rawEyepieces.split(',')
-                .map(e => parseFloat(e.trim()))
-                .filter(e => !isNaN(e) && e > 0);
-
+            const eyepieces = rawEyepieces.split(',').map(e => parseFloat(e.trim())).filter(e => !isNaN(e) && e > 0);
             if (eyepieces.length === 0) eyepieces.push(25);
 
             const { start: dateStart, mid: dateMid, end: dateEnd } = getObservationDates();
 
-            const nelmTable = { 1: 7.8, 2: 7.3, 3: 6.8, 4: 6.3, 5: 5.8, 6: 5.3, 7: 4.8, 8: 4.3, 9: 3.8 };
-            const instrumentalMagLimit = (nelmTable[bortle] || 4.3) + 5 * Math.log10(aperture / 6.0);
-
-            const skySurfMagTable = { 1: 22.0, 2: 21.7, 3: 21.3, 4: 20.8, 5: 20.1, 6: 19.3, 7: 18.5, 8: 17.8, 9: 17.0 };
-            const baseSkySurfMag = skySurfMagTable[bortle] || 17.8;
+            // On combine les cibles NGC et les planètes calculées pour la date du milieu de nuit
+            const planets = getPlanets(dateMid);
+            const combinedTargets = [...allTargets, ...planets];
 
             const processedTargets = [];
 
-            allTargets.forEach(target => {
+            combinedTargets.forEach(target => {
                 if (selectedType !== 'all' && target.type !== selectedType) return;
-                if (!isFinite(target.surfMag) || target.size_maj <= 0) return;
-                if (target.mag > instrumentalMagLimit) return;
+                if (!isFinite(target.ra) || !isFinite(target.dec)) return;
 
                 const altStart = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateStart);
                 const altMid = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateMid);
                 const altEnd = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateEnd);
 
                 const maxAlt = Math.max(altStart, altMid, altEnd);
-
                 if (maxAlt < minAlt) return;
 
                 let bestTimeLabel = "Tout au long de la nuit";
@@ -359,8 +376,7 @@
                     bestTimeLabel = "Milieu de créneau";
                 }
 
-                const altBonus = (maxAlt - 30) / 60.0;
-
+                // Traitement spécifique pour les planètes (fort grossissement recommandé)
                 let bestEyepiece = null;
                 let bestScore = 999;
                 let bestMag = 0;
@@ -368,25 +384,14 @@
                 eyepieces.forEach(ep => {
                     const mag = focal / ep;
                     const exitPupil = aperture / mag;
-                    const apparentSize = target.size_maj * mag;
+                    const apparentSize = target.size_maj * 60 * mag; // en arcsec
 
-                    const skyDimming = exitPupil < 7.0 ? 5 * Math.log10(7.0 / exitPupil) : 0;
-                    const maxSurfMagAllowed = (baseSkySurfMag + skyDimming) + 2.5;
-
-                    if (target.type !== 'cluster' && target.surfMag > maxSurfMagAllowed) return;
-                    if (apparentSize < 20.0 && target.type !== 'cluster') return;
-
-                    let sizePenalty = 0;
-                    if (target.size_maj < 2.0) {
-                        sizePenalty = Math.max(0, (60.0 - mag) * 0.15);
+                    let score = target.mag;
+                    if (target.type === 'planet') {
+                        // Pour les planètes, on cherche le grossissement idéal (ni trop faible, ni trop fort)
+                        const optimalMagForPlanet = aperture * 1.2; // Règle empirique grossissement fort
+                        score = Math.abs(mag - optimalMagForPlanet);
                     }
-
-                    let largeObjectBonus = 0;
-                    if (target.size_maj >= 3.0) {
-                        largeObjectBonus = Math.min(5.0, target.size_maj * 0.5);
-                    }
-
-                    const score = target.surfMag + sizePenalty - largeObjectBonus - (altBonus * 1.5);
 
                     if (score < bestScore) {
                         bestScore = score;
@@ -396,53 +401,25 @@
                 });
 
                 if (bestEyepiece !== null) {
-                    let difficultyLabel = "Incontournable";
-                    let difficultyClass = "easy";
-                    let reason = `Taille et clarté optimales (${bestMag}x).`;
-
-                    if (bestScore > 18.0) {
-                        difficultyLabel = "Exigeante";
-                        difficultyClass = "hard";
-                    } else if (bestScore > 16.0) {
-                        difficultyLabel = "Modérée";
-                        difficultyClass = "medium";
-                    }
-
-                    if (difficultyLabel !== "Incontournable") {
-                        if (target.size_maj < 1.5 && bestMag < 60) {
-                            reason = "Très petite (manque de grossissement).";
-                        } else if (target.surfMag > 19.5 && bortle >= 6) {
-                            reason = "Faible brillance surfacique (sensible au ciel urbain).";
-                        } else if (maxAlt < 35) {
-                            reason = "Basse sur l'horizon (absorption atmosphérique).";
-                        } else if (target.surfMag > 18.5) {
-                            reason = "Objet diffus (nécessite une vision décalée).";
-                        } else {
-                            reason = "Contraste limite sous ce ciel.";
-                        }
-                    }
-
                     processedTargets.push({
                         ...target,
                         alt: Math.round(maxAlt),
                         bestTimeLabel: bestTimeLabel,
                         bestEyepiece: bestEyepiece,
-                        visibilityIndex: bestScore,
-                        difficultyLabel: difficultyLabel,
-                        difficultyClass: difficultyClass,
-                        reason: reason
+                        visibilityIndex: target.type === 'planet' ? 1 : bestScore,
+                        difficultyLabel: target.type === 'planet' ? 'Exceptionnel' : 'Incontournable',
+                        difficultyClass: 'easy',
+                        reason: target.type === 'planet' ? `Idéal en fort grossissement (${bestMag}x).` : 'Cible claire.'
                     });
                 }
             });
-
-            processedTargets.sort((a, b) => a.visibilityIndex - b.visibilityIndex);
 
             document.getElementById('targetCount').innerText = processedTargets.length;
             const tbody = document.getElementById('targetList');
             tbody.innerHTML = '';
 
             if (processedTargets.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10">Aucun objet visible aux heures sélectionnées avec vos oculaires sous ce ciel.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10">Aucun objet visible avec ces critères.</td></tr>';
                 return;
             }
 
@@ -452,8 +429,8 @@
                     <td><b>${target.id}</b></td>
                     <td>${target.name}</td>
                     <td><span class="tag ${target.type}">${target.type}</span></td>
-                    <td>${target.mag} <small>(Sfc: <b>${target.surfMag}</b>)</small></td>
-                    <td>${target.size_maj}' x ${target.size_min}'</td>
+                    <td>${target.mag}</td>
+                    <td>${target.type === 'planet' ? '~' + Math.round(target.size_maj*60) + '"' : target.size_maj + "'"}</td>
                     <td>${target.alt}°</td>
                     <td><span class="time-badge">${target.bestTimeLabel}</span></td>
                     <td><span class="eyepiece-badge">${target.bestEyepiece} mm</span></td>
@@ -466,7 +443,6 @@
 
         function recalculate() {
             if (allTargets.length === 0) return;
-
             const aperture = parseFloat(document.getElementById('aperture').value);
             const focal = parseFloat(document.getElementById('focal').value);
             const bortle = parseInt(document.getElementById('bortle').value);
@@ -478,19 +454,12 @@
 
         function calculateVisibleTargets() {
             if (allTargets.length === 0) {
-                alert("Le catalogue n'est pas encore chargé, veuillez patienter quelques secondes.");
+                alert("Chargement du catalogue en cours...");
                 return;
             }
-
             navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    userLat = pos.coords.latitude;
-                    userLon = pos.coords.longitude;
-                    recalculate();
-                },
-                (err) => {
-                    recalculate();
-                }
+                (pos) => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; recalculate(); },
+                (err) => { recalculate(); }
             );
         }
     </script>
