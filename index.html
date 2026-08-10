@@ -263,22 +263,16 @@
                 return { ra: ra, dec: dec };
             }
 
-            // Positions écliptiques approchées valides (Mouvement moyen planétaire)
             const dDays = JD - 2451545.0;
 
-            // Longitudes géocentriques / héliocentriques simplifiées mais exactes pour l'époque actuelle
             const moonLon = 218.316 + 13.176396 * dDays;
             const moonLat = 5.13 * Math.sin((93.3 + 13.14 * dDays) * Math.PI / 180);
             const moonEq = eclipticToEquatorial(moonLon, moonLat);
 
-            // Saturne (vitesse orbitale ~0.033 deg/jour, position de référence 2026 autour du Verseau/Poissons)
             const satLon = 345.0 + 0.03345 * dDays;
             const satEq = eclipticToEquatorial(satLon, -1.5);
 
-            // Jupiter (~0.083 deg/jour, Gémeaux/Cancer)
             const jupLon = 95.0 + 0.0831 * dDays;
-            const jupEq.ra = eclipticToEquatorial(jupLon, 0.5).ra; // syntaxe propre ci-dessous
-            
             const jupCoords = eclipticToEquatorial(jupLon, 0.5);
             const marsCoords = eclipticToEquatorial(15.0 + 0.524 * dDays, 1.2);
             const venusCoords = eclipticToEquatorial(280.0 + 1.602 * dDays, -2.1);
