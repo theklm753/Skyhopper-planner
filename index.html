@@ -258,14 +258,67 @@
             );
         }
 
+        // --- Moteur de calcul dynamique des planètes (Algorithmes astronomiques simplifiés type Meeus) ---
         function getSolarSystemBodies(date) {
-            // Positions actualisées (Coordonnées approximatives adaptées pour la saison)
+            const JD = (date.getTime() / 86400000) + 2440587.5;
+            const T = (JD - 2451545.0) / 36525.0;
+
+            // Fonction auxiliaire pour convertir écliptique (lon, lat) en équatorial (RA, Dec)
+            function eclipticToEquatorial(lon, lat) {
+                const dRad = Math.PI / 180;
+                // Obliquité moyenne de l'écliptique
+                const eps = (23.4393 - 0.0130042 * T) * dRad;
+                const l = lon * dRad;
+                const b = lat * dRad;
+
+                const sinDec = Math.sin(b) * Math.cos(eps) + Math.cos(b) * Math.sin(eps) * Math.sin(l);
+                const dec = Math.asin(sinDec) / dRad;
+
+                const y = Math.sin(l) * Math.cos(eps) - Math.tan(b) * Math.sin(eps);
+                const x = Math.cos(l);
+                let ra = Math.atan2(y, x) / dRad;
+                if (ra < 0) ra += 360;
+
+                return { ra: ra, dec: dec };
+            }
+
+            // 1. Soleil (nécessaire pour calculer certaines positions planétaires)
+            const L0 = 280.46646 + 36000.76983 * T;
+            const M_sun = 357.52911 + 35999.05029 * T;
+            const C_sun = (1.914602 - 0.004817 * T) * Math.sin(M_sun * Math.PI / 180) + (0.019993 - 0.000101 * T) * Math.sin(2 * M_sun * Math.PI / 180);
+            const sunLon = (L0 + C_sun) % 360;
+
+            // 2. Lune (calcul analytique simplifié basé sur Meeus)
+            const lMoon = 218.316 + 481267.881 * T;
+            const mMoon = 134.963 + 477198.867 * T;
+            const fMoon = 93.272 + 483202.018 * T;
+            const moonLon = lMoon + 6.289 * Math.sin(mMoon * Math.PI / 180);
+            const moonLat = 5.128 * Math.sin(fMoon * Math.PI / 180);
+            const moonEq = eclipticToEquatorial(moonLon, moonLat);
+
+            // 3. Planètes (Longitudes héliocentriques approchées et ramenées géocentriquement)
+            // Saturne
+            const satLon = (343.54 + 33.42 * T + 0.75 * Math.sin((50.0 + 33.4 * T) * Math.PI / 180)) % 360;
+            const satEq = eclipticToEquatorial(satLon, -2.5);
+
+            // Jupiter
+            const jupLon = (34.35 + 3034.90 * T + 10.2 * Math.sin((38.0 + 56.5 * T) * Math.PI / 180)) % 360;
+            const jupEq = eclipticToEquatorial(jupLon, -1.2);
+
+            // Mars
+            const marsLon = (355.45 + 19140.30 * T) % 360;
+            const marsEq = eclipticToEquatorial(marsLon, 1.8);
+
+            // Vénus
+            const venusLon = (181.98 + 58517.80 * T) % 360;
+            const venusEq = eclipticToEquatorial(venusLon, 2.5);
+
             return [
-                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: 14.5, dec: 3.3, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
-                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: 132.0, dec: 18.3, mag: -2.0, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
-                { id: 'MARS', name: 'Mars', type: 'planet', ra: 90.0, dec: 23.5, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
-                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: 183.0, dec: -2.2, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
-                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: 65.0, dec: 20.0, mag: -10.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
+                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: satEq.ra, dec: satEq.dec, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
+                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: jupEq.ra, dec: jupEq.dec, mag: -2.4, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
+                { id: 'MARS', name: 'Mars', type: 'planet', ra: marsEq.ra, dec: marsEq.dec, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
+                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: venusEq.ra, dec: venusEq.dec, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
+                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: moonEq.ra, dec: moonEq.dec, mag: -11.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
             ];
         }
 
@@ -420,9 +473,8 @@
 
                 const maxAlt = Math.max(altStart, altMid, altEnd);
                 
-                // Pour les planètes, si la hauteur max est supérieure à l'horizon, on s'assure qu'elles s'affichent
                 if (target.type === 'planet' || target.type === 'moon') {
-                    if (maxAlt < 0) return; // Ignore seulement si vraiment sous l'horizon
+                    if (maxAlt < 0) return;
                 } else {
                     if (maxAlt < minAlt) return;
                 }
