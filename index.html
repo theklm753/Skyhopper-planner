@@ -13,13 +13,8 @@
         .row { display: flex; gap: 10px; }
         .row > div { flex: 1; }
         .date-group { display: flex; gap: 5px; }
-        .search-group { display: flex; gap: 5px; margin-top: 5px; }
         button { width: 100%; background-color: #d32f2f; color: white; border: none; padding: 12px; margin-top: 15px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; }
         button:hover { background-color: #f44336; }
-        button.inline-btn { margin-top: 0; width: 120px; font-size: 14px; background-color: #388e3c; }
-        button.inline-btn:hover { background-color: #43a047; }
-        button.secondary { background-color: #444; font-size: 14px; padding: 8px; margin-top: 5px; }
-        button.secondary:hover { background-color: #555; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
         th { color: #ff5252; }
@@ -34,7 +29,6 @@
         .eyepiece-badge { background-color: #333; border: 1px solid #ff5252; color: #ff5252; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px; }
         .time-badge { background-color: #222; border: 1px solid #4caf50; color: #4caf50; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
         .reason-text { font-size: 12px; color: #aaa; }
-        #locationStatus { font-size: 12px; color: #4caf50; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -49,16 +43,7 @@
     <div class="card">
         <h2>Paramètres de l'observateur</h2>
 
-        <label for="citySearch">Rechercher une ville / un lieu :</label>
-        <div class="search-group">
-            <input type="text" id="citySearch" placeholder="ex: Bouc-Bel-Air, Brest, Pic du Midi..." value="Brest">
-            <button type="button" class="inline-btn" onclick="searchCity()">Rechercher</button>
-        </div>
-        <div id="locationStatus">Lieu actif : Brest (Lat: 48.39, Lon: -4.48)</div>
-
-        <button type="button" class="secondary" onclick="triggerGeo()">📍 Utiliser ma position GPS actuelle</button>
-
-        <div class="row" style="margin-top: 10px;">
+        <div class="row">
             <div style="flex: 2;">
                 <label>Date d'observation :</label>
                 <div class="date-group">
@@ -102,8 +87,7 @@
         <label for="bortle">Indice de Bortle du ciel (1 à 9) :</label>
         <select id="bortle" onchange="recalculate()">
             <option value="1">1 - Ciel exceptionnel</option>
-            <option value="3" selected>3 - Ciel rural / Vacances</option>
-            <option value="5">5 - Ciel suburbain</option>
+            <option value="5" selected>5 - Ciel suburbain</option>
             <option value="8">8 - Ciel de ville</option>
         </select>
 
@@ -117,7 +101,9 @@
         </select>
 
         <label for="minAlt">Hauteur minimale (degrés) :</label>
-        <input type="number" id="minAlt" value="5" onchange="recalculate()">
+        <input type="number" id="minAlt" value="15" onchange="recalculate()">
+
+        <button onclick="calculateVisibleTargets()">Géolocaliser & Lancer le calcul</button>
     </div>
 
     <div class="card">
@@ -146,8 +132,8 @@
     <script src="visibility_filter.js"></script>
     <script>
         let allTargets = [];
-        let userLat = 48.39;
-        let userLon = -4.48;
+        let userLat = 48.85;
+        let userLon = 2.35;
 
         function initDateSelector() {
             const daySelect = document.getElementById('obsDay');
@@ -177,73 +163,24 @@
             yearSelect.value = currentYear;
         }
 
-        async function searchCity() {
-            const query = document.getElementById('citySearch').value.trim();
-            if (!query) return;
-
-            const statusEl = document.getElementById('locationStatus');
-            statusEl.innerText = "Recherche du lieu en cours...";
-            statusEl.style.color = "#ffa000";
-
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-
-                if (data && data.length > 0) {
-                    userLat = parseFloat(data[0].lat);
-                    userLon = parseFloat(data[0].lon);
-                    const displayName = data[0].display_name.split(',')[0]; // Garde le nom principal
-                    
-                    statusEl.innerHTML = `Lieu actif : <b>${displayName}</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
-                    statusEl.style.color = "#4caf50";
-                    recalculate();
-                } else {
-                    statusEl.innerText = "Lieu introuvable. Essayez un autre nom.";
-                    statusEl.style.color = "#f44336";
-                }
-            } catch (err) {
-                statusEl.innerText = "Erreur de connexion lors de la recherche.";
-                statusEl.style.color = "#f44336";
-            }
-        }
-
-        function triggerGeo() {
-            const statusEl = document.getElementById('locationStatus');
-            if (navigator.geolocation) {
-                statusEl.innerText = "Géolocalisation GPS en cours...";
-                statusEl.style.color = "#ffa000";
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        userLat = pos.coords.latitude;
-                        userLon = pos.coords.longitude;
-                        statusEl.innerHTML = `Lieu actif : <b>Position GPS actuelle</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
-                        statusEl.style.color = "#4caf50";
-                        recalculate();
-                    },
-                    (err) => {
-                        statusEl.innerText = "Erreur GPS. Vérifiez vos autorisations.";
-                        statusEl.style.color = "#f44336";
-                    }
-                );
-            } else {
-                alert("La géolocalisation n'est pas supportée par votre navigateur.");
-            }
-        }
-
+        // Éphémérides simplifiées stables pour les planètes et la Lune
         function getSolarSystemBodies(date) {
             const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000;
-            return [
+            
+            // Positions de référence stables (Coéquipières idéales pour affichage immédiat)
+            const results = [
                 { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: 345.0, dec: -10.5, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
                 { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: 75.0, dec: 22.0, mag: -2.4, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
                 { id: 'MARS', name: 'Mars', type: 'planet', ra: 20.0, dec: 5.0, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
                 { id: 'VENUS', name: 'Vénus', type: 'planet', ra: 110.0, dec: 25.0, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
                 { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: (280 + (d % 29.5) * 12) % 360, dec: 15.0, mag: -11.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
             ];
+
+            return results;
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
             initDateSelector();
-            searchCity(); // Lance la recherche par défaut pour "Brest"
 
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
@@ -457,6 +394,17 @@
 
             const filter = new TargetPlanner(aperture, focal, 25, bortle);
             processTargets(filter, userLat, userLon, minAlt);
+        }
+
+        function calculateVisibleTargets() {
+            if (allTargets.length === 0) {
+                alert("Chargement du catalogue en cours...");
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; recalculate(); },
+                (err) => { recalculate(); }
+            );
         }
     </script>
 </body>
