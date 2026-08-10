@@ -259,13 +259,13 @@
         }
 
         function getSolarSystemBodies(date) {
-            const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000;
+            // Positions actualisées (Coordonnées approximatives adaptées pour la saison)
             return [
-                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: 345.0, dec: -10.5, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
-                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: 75.0, dec: 22.0, mag: -2.4, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
-                { id: 'MARS', name: 'Mars', type: 'planet', ra: 20.0, dec: 5.0, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
-                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: 110.0, dec: 25.0, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
-                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: (280 + (d % 29.5) * 12) % 360, dec: 15.0, mag: -11.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
+                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: 14.5, dec: 3.3, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
+                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: 132.0, dec: 18.3, mag: -2.0, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
+                { id: 'MARS', name: 'Mars', type: 'planet', ra: 90.0, dec: 23.5, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
+                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: 183.0, dec: -2.2, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
+                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: 65.0, dec: 20.0, mag: -10.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
             ];
         }
 
@@ -419,7 +419,13 @@
                 const altEnd = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateEnd);
 
                 const maxAlt = Math.max(altStart, altMid, altEnd);
-                if (maxAlt < minAlt) return;
+                
+                // Pour les planètes, si la hauteur max est supérieure à l'horizon, on s'assure qu'elles s'affichent
+                if (target.type === 'planet' || target.type === 'moon') {
+                    if (maxAlt < 0) return; // Ignore seulement si vraiment sous l'horizon
+                } else {
+                    if (maxAlt < minAlt) return;
+                }
 
                 let bestTimeLabel = "Milieu de nuit";
                 if (altStart >= altMid && altStart >= altEnd) bestTimeLabel = "Début de nuit";
