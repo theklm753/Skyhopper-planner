@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyHopper - Planificateur de Cibles</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 15px; }
+        h1, h2 { color: #ff5252; }
+        .card { background-color: #1e1e1e; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; color: #bbb; }
+        input, select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #444; background-color: #2a2a2a; color: #fff; box-sizing: border-box; }
+        .row { display: flex; gap: 10px; }
+        .row > div { flex: 1; }
+        .date-group { display: flex; gap: 5px; }
+        button { width: 100%; background-color: #d32f2f; color: white; border: none; padding: 12px; margin-top: 15px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #f44336; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+        th { color: #ff5252; }
+        tr:hover { background-color: #2a2a2a; }
+        .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 12px; text-transform: uppercase; font-weight: bold; }
+        .nebula { background-color: #2e7d32; color: #fff; }
+        .galaxy { background-color: #1565c0; color: #fff; }
+        .cluster { background-color: #f57c00; color: #fff; }
+        .easy { color: #4caf50; font-weight: bold; }
+        .medium { color: #ff9800; font-weight: bold; }
+        .hard { color: #f44336; font-weight: bold; }
+        .eyepiece-badge { background-color: #333; border: 1px solid #ff5252; color: #ff5252; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        .time-badge { background-color: #222; border: 1px solid #4caf50; color: #4caf50; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+        .reason-text { font-size: 12px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <h1>Planificateur de Cibles SkyHopper</h1>
+
+    <div id="importCard" class="card" style="border: 1px solid #ff5252;">
+        <h2>Chargement du Catalogue NGC</h2>
+        <p id="dbStatus">Aucune base détectée. Veuillez sélectionner votre fichier <b>NGC.csv</b> (une seule fois) :</p>
+        <input type="file" id="csvFileInput" accept=".csv">
+    </div>
+
+    <div class="card">
+        <h2>Paramètres de l'observateur</h2>
+
+        <div class="row">
+            <div style="flex: 2;">
+                <label>Date d'observation :</label>
+                <div class="date-group">
+                    <select id="obsDay" onchange="recalculate()"></select>
+                    <select id="obsMonth" onchange="recalculate()">
+                        <option value="0">Jan</option>
+                        <option value="1">Fév</option>
+                        <option value="2">Mar</option>
+                        <option value="3">Avr</option>
+                        <option value="4">Mai</option>
+                        <option value="5">Juin</option>
+                        <option value="6">Juil</option>
+                        <option value="7">Aoû</option>
+                        <option value="8">Sep</option>
+                        <option value="9">Oct</option>
+                        <option value="10">Nov</option>
+                        <option value="11">Déc</option>
+                    </select>
+                    <select id="obsYear" onchange="recalculate()"></select>
+                </div>
+            </div>
+            <div>
+                <label for="startTime">Début :</label>
+                <input type="time" id="startTime" value="23:00" onchange="recalculate()">
+            </div>
+            <div>
+                <label for="endTime">Fin :</label>
+                <input type="time" id="endTime" value="04:00" onchange="recalculate()">
+            </div>
+        </div>
+        
+        <label for="aperture">Diamètre du télescope (mm) :</label>
+        <input type="number" id="aperture" value="150" onchange="recalculate()">
+
+        <label for="focal">Longueur focale télescope (mm) :</label>
+        <input type="number" id="focal" value="750" onchange="recalculate()">
+
+        <label for="eyepieces">Vos oculaires disponibles (focales en mm, séparées par des virgules) :</label>
+        <input type="text" id="eyepieces" value="25, 10, 6" placeholder="ex: 25, 10, 6" onchange="recalculate()">
+
+        <label for="bortle">Indice de Bortle du ciel (1 à 9) :</label>
+        <select id="bortle" onchange="recalculate()">
+            <option value="1">1 - Ciel exceptionnel</option>
+            <option value="2">2 - Ciel très sombre</option>
+            <option value="3">3 - Ciel rural</option>
+            <option value="4">4 - Transition rurale/suburbaine</option>
+            <option value="5">5 - Ciel suburbain</option>
+            <option value="6">6 - Suburbain lumineux</option>
+            <option value="7">7 - Transition suburbaine/urbaine</option>
+            <option value="8" selected>8 - Ciel de ville</option>
+            <option value="9">9 - Ciel de centre-ville</option>
+        </select>
+
+        <label for="targetTypeFilter">Type de cible préféré :</label>
+        <select id="targetTypeFilter" onchange="recalculate()">
+            <option value="all">Tous les types d'objets</option>
+            <option value="nebula" selected>Nébuleuses uniquement (M27, M57...)</option>
+            <option value="galaxy">Galaxies uniquement (M31, M51...)</option>
+            <option value="cluster">Amas d'étoiles uniquement (M13, M45...)</option>
+        </select>
+
+        <label for="minAlt">Hauteur minimale (degrés) :</label>
+        <input type="number" id="minAlt" value="30" onchange="recalculate()">
+
+        <button onclick="calculateVisibleTargets()">Géolocaliser & Lancer le calcul</button>
+    </div>
+
+    <div class="card">
+        <h2>Cibles recommandées (<span id="targetCount">0</span>)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nom</th>
+                    <th>Type</th>
+                    <th>Mag (Sfc)</th>
+                    <th>Taille</th>
+                    <th>Haut. Max</th>
+                    <th>Moment Idéal</th>
+                    <th>Oculaire idéal</th>
+                    <th>Visibilité</th>
+                    <th>Diagnostic</th>
+                </tr>
+            </thead>
+            <tbody id="targetList">
+                <tr><td colspan="10">Chargez le fichier CSV ci-dessus puis lancez le calcul.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="visibility_filter.js"></script>
+    <script>
+        let allTargets = [];
+        let userLat = 48.85;
+        let userLon = 2.35;
+
+        function initDateSelector() {
+            const daySelect = document.getElementById('obsDay');
+            const yearSelect = document.getElementById('obsYear');
+            const monthSelect = document.getElementById('obsMonth');
+
+            const now = new Date();
+
+            // Générer jours (1 à 31)
+            daySelect.innerHTML = '';
+            for (let i = 1; i <= 31; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = i < 10 ? '0' + i : i;
+                daySelect.appendChild(opt);
+            }
+
+            // Générer années (année courante + 2 ans)
+            yearSelect.innerHTML = '';
+            const currentYear = now.getFullYear();
+            for (let i = currentYear; i <= currentYear + 2; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = i;
+                yearSelect.appendChild(opt);
+            }
+
+            // Valeurs par défaut = aujourd'hui
+            daySelect.value = now.getDate();
+            monthSelect.value = now.getMonth();
+            yearSelect.value = currentYear;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initDateSelector();
+
+            const localData = localStorage.getItem('skyhopper_ngc_db');
+            if (localData) {
+                allTargets = JSON.parse(localData);
+                document.getElementById('dbStatus').innerHTML = `<b> Base prête !</b> (${allTargets.length} objets en cache local).`;
+                document.getElementById('dbStatus').style.color = '#4caf50';
+            }
+        });
+
+        document.getElementById('csvFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            document.getElementById('dbStatus').innerText = "Analyse du fichier en cours...";
+
+            reader.onload = function(evt) {
+                const csvText = evt.target.result;
+                allTargets = parseOpenNGC(csvText);
+
+                try {
+                    localStorage.setItem('skyhopper_ngc_db', JSON.stringify(allTargets));
+                    document.getElementById('dbStatus').innerHTML = `<b> Succès !</b> ${allTargets.length} objets sauvegardés dans votre navigateur.`;
+                    document.getElementById('dbStatus').style.color = '#4caf50';
+                } catch(err) {
+                    document.getElementById('dbStatus').innerText = `${allTargets.length} objets chargés en mémoire (stockage local saturé).`;
+                }
+            };
+
+            reader.readAsText(file);
+        });
+
+        function parseOpenNGC(csvText) {
+            const lines = csvText.split('\n');
+            if (lines.length < 2) return [];
+
+            const headers = lines[0].split(';').map(h => h.trim().toLowerCase());
+            
+            const idxName = headers.indexOf('name');
+            const idxType = headers.indexOf('type');
+            const idxRA = headers.indexOf('ra');
+            const idxDec = headers.indexOf('dec');
+            const idxMaj = headers.indexOf('majax');
+            const idxMin = headers.indexOf('minax');
+            const idxBMag = headers.indexOf('b-mag');
+            const idxVMag = headers.indexOf('v-mag');
+            const idxCommon = headers.indexOf('common names');
+
+            const targets = [];
+            
+            const cleanNum = (val) => {
+                if (!val) return NaN;
+                return parseFloat(val.trim().replace(',', '.'));
+            };
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const cols = lines[i].split(';');
+
+                const name = cols[idxName] ? cols[idxName].trim() : '';
+                const typeRaw = cols[idxType] ? cols[idxType].trim().toLowerCase() : '';
+                const raStr = cols[idxRA] ? cols[idxRA].trim() : '';
+                const decStr = cols[idxDec] ? cols[idxDec].trim() : '';
+
+                if (!raStr || !decStr || !name) continue;
+
+                let maj = idxMaj !== -1 ? cleanNum(cols[idxMaj]) : NaN;
+                let min = idxMin !== -1 ? cleanNum(cols[idxMin]) : NaN;
+                let vMag = idxVMag !== -1 ? cleanNum(cols[idxVMag]) : NaN;
+                let bMag = idxBMag !== -1 ? cleanNum(cols[idxBMag]) : NaN;
+
+                let mag = !isNaN(vMag) ? vMag : (!isNaN(bMag) ? bMag : NaN);
+                if (isNaN(mag)) continue;
+
+                let type = 'cluster';
+                if (
+                    typeRaw.includes('neb') || 
+                    typeRaw.includes('pn') || 
+                    typeRaw.includes('snr') || 
+                    typeRaw.includes('hii') || 
+                    typeRaw.includes('rfn') || 
+                    typeRaw.includes('emn')
+                ) {
+                    type = 'nebula';
+                } else if (
+                    typeRaw.includes('galaxy') || 
+                    typeRaw.includes('gal') || 
+                    typeRaw.includes('g')
+                ) {
+                    type = 'galaxy';
+                }
+
+                if (isNaN(maj) || maj <= 0) maj = 0.1;
+                if (isNaN(min) || min <= 0) min = maj;
+
+                const raParts = raStr.split(':').map(Number);
+                const raDeg = ((raParts[0] || 0) + (raParts[1] || 0)/60 + (raParts[2] || 0)/3600) * 15;
+
+                const decParts = decStr.split(':');
+                const decSign = decStr.startsWith('-') ? -1 : 1;
+                const decDeg = decSign * (Math.abs(parseFloat(decParts[0]) || 0) + (parseFloat(decParts[1]) || 0)/60 + (parseFloat(decParts[2]) || 0)/3600);
+
+                const areaArcSec = Math.PI * (maj / 2.0) * (min / 2.0) * 3600.0;
+                let surfMag = mag + 2.5 * Math.log10(areaArcSec);
+
+                const commonName = (idxCommon !== -1 && cols[idxCommon] && cols[idxCommon].trim() !== '') 
+                    ? cols[idxCommon].split(',')[0].trim() 
+                    : name;
+
+                targets.push({
+                    id: name,
+                    name: commonName,
+                    type: type,
+                    ra: raDeg,
+                    dec: decDeg,
+                    mag: Math.round(mag * 10) / 10,
+                    size_maj: Math.round(maj * 10) / 10,
+                    size_min: Math.round(min * 10) / 10,
+                    surfMag: Math.round(surfMag * 10) / 10
+                });
+            }
+            return targets;
+        }
+
+        function getObservationDates() {
+            const day = parseInt(document.getElementById('obsDay').value);
+            const month = parseInt(document.getElementById('obsMonth').value);
+            const year = parseInt(document.getElementById('obsYear').value);
+
+            const startStr = document.getElementById('startTime').value || "23:00";
+            const endStr = document.getElementById('endTime').value || "04:00";
+
+            const [startH, startM] = startStr.split(':').map(Number);
+            const [endH, endM] = endStr.split(':').map(Number);
+
+            let startDate = new Date(year, month, day, startH, startM);
+            let endDate = new Date(year, month, day, endH, endM);
+
+            if (endDate <= startDate) {
+                endDate.setDate(endDate.getDate() + 1);
+            }
+
+            const midTime = startDate.getTime() + (endDate.getTime() - startDate.getTime()) / 2;
+            const midDate = new Date(midTime);
+
+            return { start: startDate, mid: midDate, end: endDate };
+        }
+
+        function processTargets(filter, lat, lon, minAlt) {
+            const aperture = parseFloat(document.getElementById('aperture').value) || 150;
+            const focal = parseFloat(document.getElementById('focal').value) || 750;
+            const bortle = parseInt(document.getElementById('bortle').value) || 8;
+            const selectedType = document.getElementById('targetTypeFilter').value;
+
+            const rawEyepieces = document.getElementById('eyepieces').value;
+            const eyepieces = rawEyepieces.split(',')
+                .map(e => parseFloat(e.trim()))
+                .filter(e => !isNaN(e) && e > 0);
+
+            if (eyepieces.length === 0) eyepieces.push(25);
+
+            const { start: dateStart, mid: dateMid, end: dateEnd } = getObservationDates();
+
+            const nelmTable = { 1: 7.8, 2: 7.3, 3: 6.8, 4: 6.3, 5: 5.8, 6: 5.3, 7: 4.8, 8: 4.3, 9: 3.8 };
+            const instrumentalMagLimit = (nelmTable[bortle] || 4.3) + 5 * Math.log10(aperture / 6.0);
+
+            const skySurfMagTable = { 1: 22.0, 2: 21.7, 3: 21.3, 4: 20.8, 5: 20.1, 6: 19.3, 7: 18.5, 8: 17.8, 9: 17.0 };
+            const baseSkySurfMag = skySurfMagTable[bortle] || 17.8;
+
+            const processedTargets = [];
+
+            allTargets.forEach(target => {
+                if (selectedType !== 'all' && target.type !== selectedType) return;
+                if (!isFinite(target.surfMag) || target.size_maj <= 0) return;
+                if (target.mag > instrumentalMagLimit) return;
+
+                const altStart = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateStart);
+                const altMid = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateMid);
+                const altEnd = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateEnd);
+
+                const maxAlt = Math.max(altStart, altMid, altEnd);
+
+                if (maxAlt < minAlt) return;
+
+                let bestTimeLabel = "Tout au long de la nuit";
+                if (altStart >= altMid && altStart >= altEnd && (altStart - altEnd) > 5) {
+                    bestTimeLabel = "Début de créneau";
+                } else if (altEnd >= altStart && altEnd >= altMid && (altEnd - altStart) > 5) {
+                    bestTimeLabel = "Fin de créneau";
+                } else if (altMid > altStart && altMid > altEnd) {
+                    bestTimeLabel = "Milieu de créneau";
+                }
+
+                const altBonus = (maxAlt - 30) / 60.0;
+
+                let bestEyepiece = null;
+                let bestScore = 999;
+                let bestMag = 0;
+
+                eyepieces.forEach(ep => {
+                    const mag = focal / ep;
+                    const exitPupil = aperture / mag;
+                    const apparentSize = target.size_maj * mag;
+
+                    const skyDimming = exitPupil < 7.0 ? 5 * Math.log10(7.0 / exitPupil) : 0;
+                    const maxSurfMagAllowed = (baseSkySurfMag + skyDimming) + 2.5;
+
+                    if (target.type !== 'cluster' && target.surfMag > maxSurfMagAllowed) return;
+                    if (apparentSize < 20.0 && target.type !== 'cluster') return;
+
+                    let sizePenalty = 0;
+                    if (target.size_maj < 2.0) {
+                        sizePenalty = Math.max(0, (60.0 - mag) * 0.15);
+                    }
+
+                    let largeObjectBonus = 0;
+                    if (target.size_maj >= 3.0) {
+                        largeObjectBonus = Math.min(5.0, target.size_maj * 0.5);
+                    }
+
+                    const score = target.surfMag + sizePenalty - largeObjectBonus - (altBonus * 1.5);
+
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestEyepiece = ep;
+                        bestMag = Math.round(mag);
+                    }
+                });
+
+                if (bestEyepiece !== null) {
+                    let difficultyLabel = "Incontournable";
+                    let difficultyClass = "easy";
+                    let reason = `Taille et clarté optimales (${bestMag}x).`;
+
+                    if (bestScore > 18.0) {
+                        difficultyLabel = "Exigeante";
+                        difficultyClass = "hard";
+                    } else if (bestScore > 16.0) {
+                        difficultyLabel = "Modérée";
+                        difficultyClass = "medium";
+                    }
+
+                    if (difficultyLabel !== "Incontournable") {
+                        if (target.size_maj < 1.5 && bestMag < 60) {
+                            reason = "Très petite (manque de grossissement).";
+                        } else if (target.surfMag > 19.5 && bortle >= 6) {
+                            reason = "Faible brillance surfacique (sensible au ciel urbain).";
+                        } else if (maxAlt < 35) {
+                            reason = "Basse sur l'horizon (absorption atmosphérique).";
+                        } else if (target.surfMag > 18.5) {
+                            reason = "Objet diffus (nécessite une vision décalée).";
+                        } else {
+                            reason = "Contraste limite sous ce ciel.";
+                        }
+                    }
+
+                    processedTargets.push({
+                        ...target,
+                        alt: Math.round(maxAlt),
+                        bestTimeLabel: bestTimeLabel,
+                        bestEyepiece: bestEyepiece,
+                        visibilityIndex: bestScore,
+                        difficultyLabel: difficultyLabel,
+                        difficultyClass: difficultyClass,
+                        reason: reason
+                    });
+                }
+            });
+
+            processedTargets.sort((a, b) => a.visibilityIndex - b.visibilityIndex);
+
+            document.getElementById('targetCount').innerText = processedTargets.length;
+            const tbody = document.getElementById('targetList');
+            tbody.innerHTML = '';
+
+            if (processedTargets.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10">Aucun objet visible aux heures sélectionnées avec vos oculaires sous ce ciel.</td></tr>';
+                return;
+            }
+
+            processedTargets.slice(0, 100).forEach(target => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><b>${target.id}</b></td>
+                    <td>${target.name}</td>
+                    <td><span class="tag ${target.type}">${target.type}</span></td>
+                    <td>${target.mag} <small>(Sfc: <b>${target.surfMag}</b>)</small></td>
+                    <td>${target.size_maj}' x ${target.size_min}'</td>
+                    <td>${target.alt}°</td>
+                    <td><span class="time-badge">${target.bestTimeLabel}</span></td>
+                    <td><span class="eyepiece-badge">${target.bestEyepiece} mm</span></td>
+                    <td><span class="${target.difficultyClass}">${target.difficultyLabel}</span></td>
+                    <td><span class="reason-text">${target.reason}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function recalculate() {
+            if (allTargets.length === 0) return;
+
+            const aperture = parseFloat(document.getElementById('aperture').value);
+            const focal = parseFloat(document.getElementById('focal').value);
+            const bortle = parseInt(document.getElementById('bortle').value);
+            const minAlt = parseFloat(document.getElementById('minAlt').value);
+
+            const filter = new TargetPlanner(aperture, focal, 25, bortle);
+            processTargets(filter, userLat, userLon, minAlt);
+        }
+
+        function calculateVisibleTargets() {
+            if (allTargets.length === 0) {
+                alert("Veuillez d'abord sélectionner le fichier NGC.csv en haut de la page.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    userLat = pos.coords.latitude;
+                    userLon = pos.coords.longitude;
+                    recalculate();
+                },
+                (err) => {
+                    recalculate();
+                }
+            );
+        }
+    </script>
+</body>
+</html>
