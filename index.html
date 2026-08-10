@@ -31,8 +31,6 @@
         .planet { background-color: #7b1fa2; color: #fff; }
         .moon { background-color: #c2185b; color: #fff; }
         .easy { color: #4caf50; font-weight: bold; }
-        .medium { color: #ffeb3b; font-weight: bold; }
-        .hard { color: #ff5252; font-weight: bold; }
         .eyepiece-badge { background-color: #333; border: 1px solid #ff5252; color: #ff5252; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px; }
         .time-badge { background-color: #222; border: 1px solid #4caf50; color: #4caf50; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
         .reason-text { font-size: 12px; color: #aaa; }
@@ -53,10 +51,10 @@
 
         <label for="citySearch">Rechercher une ville / un lieu :</label>
         <div class="search-group">
-            <input type="text" id="citySearch" placeholder="ex: Paris, Brest, Marseille..." value="Paris">
+            <input type="text" id="citySearch" placeholder="ex: Bouc-Bel-Air, Brest, Pic du Midi..." value="Brest">
             <button type="button" class="inline-btn" onclick="searchCity()">Rechercher</button>
         </div>
-        <div id="locationStatus">Lieu actif : Paris (Lat: 48.85, Lon: 2.35)[cite: 1]</div>
+        <div id="locationStatus">Lieu actif : Brest (Lat: 48.39, Lon: -4.48)</div>
 
         <button type="button" class="secondary" onclick="triggerGeo()">📍 Utiliser ma position GPS actuelle</button>
 
@@ -103,15 +101,10 @@
 
         <label for="bortle">Indice de Bortle du ciel (1 à 9) :</label>
         <select id="bortle" onchange="recalculate()">
-            <option value="1">1 - Ciel exceptionnel (noir absolu)</option>
-            <option value="2">2 - Vrai ciel noir de campagne</option>
+            <option value="1">1 - Ciel exceptionnel</option>
             <option value="3" selected>3 - Ciel rural / Vacances</option>
-            <option value="4">4 - Transition campagne / périurbain</option>
-            <option value="5">5 - Ciel de banlieue</option>
-            <option value="6">6 - Banlieue claire</option>
-            <option value="7">7 - Transition banlieue / ville</option>
+            <option value="5">5 - Ciel suburbain</option>
             <option value="8">8 - Ciel de ville</option>
-            <option value="9">9 - Centre-ville très éclairé</option>
         </select>
 
         <label for="targetTypeFilter">Type de cible préféré :</label>
@@ -153,8 +146,8 @@
     <script src="visibility_filter.js"></script>
     <script>
         let allTargets = [];
-        let userLat = 48.85;
-        let userLon = 2.35;
+        let userLat = 48.39;
+        let userLon = -4.48;
 
         function initDateSelector() {
             const daySelect = document.getElementById('obsDay');
@@ -199,7 +192,7 @@
                 if (data && data.length > 0) {
                     userLat = parseFloat(data[0].lat);
                     userLon = parseFloat(data[0].lon);
-                    const displayName = data[0].display_name.split(',')[0];
+                    const displayName = data[0].display_name.split(',')[0]; // Garde le nom principal
                     
                     statusEl.innerHTML = `Lieu actif : <b>${displayName}</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
                     statusEl.style.color = "#4caf50";
@@ -209,87 +202,48 @@
                     statusEl.style.color = "#f44336";
                 }
             } catch (err) {
-                statusEl.innerText = "Erreur réseau (vérifiez votre connexion).";
+                statusEl.innerText = "Erreur de connexion lors de la recherche.";
                 statusEl.style.color = "#f44336";
             }
         }
 
         function triggerGeo() {
             const statusEl = document.getElementById('locationStatus');
-            const searchInput = document.getElementById('citySearch');
-
-            if (!navigator.geolocation) {
+            if (navigator.geolocation) {
+                statusEl.innerText = "Géolocalisation GPS en cours...";
+                statusEl.style.color = "#ffa000";
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        userLat = pos.coords.latitude;
+                        userLon = pos.coords.longitude;
+                        statusEl.innerHTML = `Lieu actif : <b>Position GPS actuelle</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
+                        statusEl.style.color = "#4caf50";
+                        recalculate();
+                    },
+                    (err) => {
+                        statusEl.innerText = "Erreur GPS. Vérifiez vos autorisations.";
+                        statusEl.style.color = "#f44336";
+                    }
+                );
+            } else {
                 alert("La géolocalisation n'est pas supportée par votre navigateur.");
-                return;
             }
-
-            statusEl.innerText = "Acquisition du signal GPS...";
-            statusEl.style.color = "#ffa000";
-
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    userLat = pos.coords.latitude;
-                    userLon = pos.coords.longitude;
-                    searchInput.value = "Position GPS";
-                    statusEl.innerHTML = `Lieu actif : <b>GPS Actuel</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
-                    statusEl.style.color = "#4caf50";
-                    recalculate();
-                },
-                (err) => {
-                    statusEl.innerText = "Erreur GPS ou accès refusé par le navigateur.";
-                    statusEl.style.color = "#f44336";
-                },
-                { timeout: 10000, enableHighAccuracy: true }
-            );
         }
 
         function getSolarSystemBodies(date) {
-            const JD = (date.getTime() / 86400000) + 2440587.5;
-            const T = (JD - 2451545.0) / 36525.0;
-
-            function eclipticToEquatorial(lon, lat) {
-                const dRad = Math.PI / 180;
-                const eps = (23.4393 - 0.0130042 * T) * dRad;
-                const l = (lon % 360) * dRad;
-                const b = lat * dRad;
-
-                const sinDec = Math.sin(b) * Math.cos(eps) + Math.cos(b) * Math.sin(eps) * Math.sin(l);
-                const dec = Math.asin(sinDec) / dRad;
-
-                const y = Math.sin(l) * Math.cos(eps) - Math.tan(b) * Math.sin(eps);
-                const x = Math.cos(l);
-                let ra = Math.atan2(y, x) / dRad;
-                if (ra < 0) ra += 360;
-
-                return { ra: ra, dec: dec };
-            }
-
-            const dDays = JD - 2451545.0;
-
-            const moonLon = 218.316 + 13.176396 * dDays;
-            const moonLat = 5.13 * Math.sin((93.3 + 13.14 * dDays) * Math.PI / 180);
-            const moonEq = eclipticToEquatorial(moonLon, moonLat);
-
-            const satLon = 345.0 + 0.03345 * dDays;
-            const satEq = eclipticToEquatorial(satLon, -1.5);
-
-            const jupLon = 95.0 + 0.0831 * dDays;
-            const jupCoords = eclipticToEquatorial(jupLon, 0.5);
-            const marsCoords = eclipticToEquatorial(15.0 + 0.524 * dDays, 1.2);
-            const venusCoords = eclipticToEquatorial(280.0 + 1.602 * dDays, -2.1);
-
+            const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000;
             return [
-                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: satEq.ra, dec: satEq.dec, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
-                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: jupCoords.ra, dec: jupCoords.dec, mag: -2.4, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
-                { id: 'MARS', name: 'Mars', type: 'planet', ra: marsCoords.ra, dec: marsCoords.dec, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
-                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: venusCoords.ra, dec: venusCoords.dec, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
-                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: moonEq.ra, dec: moonEq.dec, mag: -11.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
+                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: 345.0, dec: -10.5, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
+                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: 75.0, dec: 22.0, mag: -2.4, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
+                { id: 'MARS', name: 'Mars', type: 'planet', ra: 20.0, dec: 5.0, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
+                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: 110.0, dec: 25.0, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
+                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: (280 + (d % 29.5) * 12) % 360, dec: 15.0, mag: -11.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
             ];
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
             initDateSelector();
-            searchCity();
+            searchCity(); // Lance la recherche par défaut pour "Brest"
 
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
@@ -437,38 +391,22 @@
                 const altEnd = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateEnd);
 
                 const maxAlt = Math.max(altStart, altMid, altEnd);
-                
-                if (target.type === 'planet' || target.type === 'moon') {
-                    if (maxAlt < 0) return;
-                } else {
-                    if (maxAlt < minAlt) return;
-                }
-
-                // Utilisation de la logique d'évaluation de ton fichier de filtre externe
-                const evaluation = filter.evaluateTarget ? filter.evaluateTarget(target, maxAlt, eyepieces) : null;
+                if (maxAlt < minAlt) return;
 
                 let bestTimeLabel = "Milieu de nuit";
                 if (altStart >= altMid && altStart >= altEnd) bestTimeLabel = "Début de nuit";
                 if (altEnd >= altStart && altEnd >= altMid) bestTimeLabel = "Fin de nuit";
 
                 let bestEyepiece = eyepieces[0];
-                let difficultyLabel = "Visible";
-                let difficultyClass = "easy";
-                let reason = "Cible accessible.";
+                let bestMag = Math.round(focal / bestEyepiece);
 
-                if (evaluation) {
-                    difficultyLabel = evaluation.label || difficultyLabel;
-                    difficultyClass = evaluation.className || difficultyClass;
-                    reason = evaluation.reason || reason;
-                    if (evaluation.bestEyepiece) bestEyepiece = evaluation.bestEyepiece;
-                } else if (target.type === 'planet') {
-                    difficultyLabel = "Planète majeure";
-                    difficultyClass = "easy";
-                    const bestMag = Math.round(focal / bestEyepiece);
+                let label = "Incontournable";
+                let reason = "Cible claire.";
+                if (target.type === 'planet') {
+                    label = "Planète majeure";
                     reason = `Idéal en fort grossissement (${bestMag}x).`;
                 } else if (target.type === 'moon') {
-                    difficultyLabel = "Sélène / Lune";
-                    difficultyClass = "easy";
+                    label = "Sélène / Lune";
                     reason = "Détails des cratères visibles.";
                 }
 
@@ -477,8 +415,8 @@
                     alt: Math.round(maxAlt),
                     bestTimeLabel: bestTimeLabel,
                     bestEyepiece: bestEyepiece,
-                    difficultyLabel: difficultyLabel,
-                    difficultyClass: difficultyClass,
+                    difficultyLabel: label,
+                    difficultyClass: 'easy',
                     reason: reason
                 });
             });
