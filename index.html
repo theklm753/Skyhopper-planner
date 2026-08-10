@@ -13,8 +13,13 @@
         .row { display: flex; gap: 10px; }
         .row > div { flex: 1; }
         .date-group { display: flex; gap: 5px; }
+        .search-group { display: flex; gap: 5px; margin-top: 5px; }
         button { width: 100%; background-color: #d32f2f; color: white; border: none; padding: 12px; margin-top: 15px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; }
         button:hover { background-color: #f44336; }
+        button.inline-btn { margin-top: 0; width: 120px; font-size: 14px; background-color: #388e3c; }
+        button.inline-btn:hover { background-color: #43a047; }
+        button.secondary { background-color: #444; font-size: 14px; padding: 8px; margin-top: 5px; }
+        button.secondary:hover { background-color: #555; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
         th { color: #ff5252; }
@@ -26,11 +31,10 @@
         .planet { background-color: #7b1fa2; color: #fff; }
         .moon { background-color: #c2185b; color: #fff; }
         .easy { color: #4caf50; font-weight: bold; }
-        .medium { color: #ff9800; font-weight: bold; }
-        .hard { color: #f44336; font-weight: bold; }
         .eyepiece-badge { background-color: #333; border: 1px solid #ff5252; color: #ff5252; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px; }
         .time-badge { background-color: #222; border: 1px solid #4caf50; color: #4caf50; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
         .reason-text { font-size: 12px; color: #aaa; }
+        #locationStatus { font-size: 12px; color: #4caf50; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -45,7 +49,16 @@
     <div class="card">
         <h2>Paramètres de l'observateur</h2>
 
-        <div class="row">
+        <label for="citySearch">Rechercher une ville / un lieu :</label>
+        <div class="search-group">
+            <input type="text" id="citySearch" placeholder="ex: Bouc-Bel-Air, Brest, Pic du Midi..." value="Brest">
+            <button type="button" class="inline-btn" onclick="searchCity()">Rechercher</button>
+        </div>
+        <div id="locationStatus">Lieu actif : Brest (Lat: 48.39, Lon: -4.48)</div>
+
+        <button type="button" class="secondary" onclick="triggerGeo()">📍 Utiliser ma position GPS actuelle</button>
+
+        <div class="row" style="margin-top: 10px;">
             <div style="flex: 2;">
                 <label>Date d'observation :</label>
                 <div class="date-group">
@@ -69,11 +82,11 @@
             </div>
             <div>
                 <label for="startTime">Début :</label>
-                <input type="time" id="startTime" value="23:00" onchange="recalculate()">
+                <input type="time" id="startTime" value="22:00" onchange="recalculate()">
             </div>
             <div>
                 <label for="endTime">Fin :</label>
-                <input type="time" id="endTime" value="04:00" onchange="recalculate()">
+                <input type="time" id="endTime" value="03:00" onchange="recalculate()">
             </div>
         </div>
         
@@ -89,14 +102,9 @@
         <label for="bortle">Indice de Bortle du ciel (1 à 9) :</label>
         <select id="bortle" onchange="recalculate()">
             <option value="1">1 - Ciel exceptionnel</option>
-            <option value="2">2 - Ciel très sombre</option>
-            <option value="3">3 - Ciel rural</option>
-            <option value="4">4 - Transition rurale/suburbaine</option>
+            <option value="3" selected>3 - Ciel rural / Vacances</option>
             <option value="5">5 - Ciel suburbain</option>
-            <option value="6">6 - Suburbain lumineux</option>
-            <option value="7">7 - Transition suburbaine/urbaine</option>
-            <option value="8" selected>8 - Ciel de ville</option>
-            <option value="9">9 - Ciel de centre-ville</option>
+            <option value="8">8 - Ciel de ville</option>
         </select>
 
         <label for="targetTypeFilter">Type de cible préféré :</label>
@@ -109,9 +117,7 @@
         </select>
 
         <label for="minAlt">Hauteur minimale (degrés) :</label>
-        <input type="number" id="minAlt" value="30" onchange="recalculate()">
-
-        <button onclick="calculateVisibleTargets()">Géolocaliser & Lancer le calcul</button>
+        <input type="number" id="minAlt" value="5" onchange="recalculate()">
     </div>
 
     <div class="card">
@@ -140,8 +146,8 @@
     <script src="visibility_filter.js"></script>
     <script>
         let allTargets = [];
-        let userLat = 48.85;
-        let userLon = 2.35;
+        let userLat = 48.39;
+        let userLon = -4.48;
 
         function initDateSelector() {
             const daySelect = document.getElementById('obsDay');
@@ -171,74 +177,73 @@
             yearSelect.value = currentYear;
         }
 
-        // Calcul astronomique amélioré pour le Système Solaire (Planètes + Lune)
+        async function searchCity() {
+            const query = document.getElementById('citySearch').value.trim();
+            if (!query) return;
+
+            const statusEl = document.getElementById('locationStatus');
+            statusEl.innerText = "Recherche du lieu en cours...";
+            statusEl.style.color = "#ffa000";
+
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    userLat = parseFloat(data[0].lat);
+                    userLon = parseFloat(data[0].lon);
+                    const displayName = data[0].display_name.split(',')[0]; // Garde le nom principal
+                    
+                    statusEl.innerHTML = `Lieu actif : <b>${displayName}</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
+                    statusEl.style.color = "#4caf50";
+                    recalculate();
+                } else {
+                    statusEl.innerText = "Lieu introuvable. Essayez un autre nom.";
+                    statusEl.style.color = "#f44336";
+                }
+            } catch (err) {
+                statusEl.innerText = "Erreur de connexion lors de la recherche.";
+                statusEl.style.color = "#f44336";
+            }
+        }
+
+        function triggerGeo() {
+            const statusEl = document.getElementById('locationStatus');
+            if (navigator.geolocation) {
+                statusEl.innerText = "Géolocalisation GPS en cours...";
+                statusEl.style.color = "#ffa000";
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        userLat = pos.coords.latitude;
+                        userLon = pos.coords.longitude;
+                        statusEl.innerHTML = `Lieu actif : <b>Position GPS actuelle</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
+                        statusEl.style.color = "#4caf50";
+                        recalculate();
+                    },
+                    (err) => {
+                        statusEl.innerText = "Erreur GPS. Vérifiez vos autorisations.";
+                        statusEl.style.color = "#f44336";
+                    }
+                );
+            } else {
+                alert("La géolocalisation n'est pas supportée par votre navigateur.");
+            }
+        }
+
         function getSolarSystemBodies(date) {
-            const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000; // Jours depuis J2000.0
-            
-            // Éléments orbitaux moyens (Longitude moyenne L et longitude du périhélie p)
-            const bodies = [
-                { id: 'VENUS', name: 'Vénus', N: 210.6644, i: 3.3947, w: 54.884, a: 0.72333, L: 181.9798, M_n: 1.60213034, mag: -4.0, size: 15, type: 'planet' },
-                { id: 'MARS', name: 'Mars', N: 49.5574, i: 1.8497, w: 286.5016, a: 1.52368, L: 355.4533, M_n: 0.52403838, mag: 1.0, size: 8, type: 'planet' },
-                { id: 'JUPITER', name: 'Jupiter', N: 100.4542, i: 1.3033, w: 273.8777, a: 5.20256, L: 34.3515, M_n: 0.0830853, mag: -2.2, size: 40, type: 'planet' },
-                { id: 'SATURNE', name: 'Saturne', N: 113.6634, i: 2.4886, w: 339.3939, a: 9.55475, L: 50.0774, M_n: 0.0334441, mag: 0.5, size: 18, type: 'planet' }
+            const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000;
+            return [
+                { id: 'SATURNE', name: 'Saturne', type: 'planet', ra: 345.0, dec: -10.5, mag: 0.6, size_maj: 0.3, size_min: 0.3, surfMag: 10.0 },
+                { id: 'JUPITER', name: 'Jupiter', type: 'planet', ra: 75.0, dec: 22.0, mag: -2.4, size_maj: 0.7, size_min: 0.7, surfMag: 10.0 },
+                { id: 'MARS', name: 'Mars', type: 'planet', ra: 20.0, dec: 5.0, mag: 1.1, size_maj: 0.15, size_min: 0.15, surfMag: 10.0 },
+                { id: 'VENUS', name: 'Vénus', type: 'planet', ra: 110.0, dec: 25.0, mag: -3.9, size_maj: 0.25, size_min: 0.25, surfMag: 10.0 },
+                { id: 'LUNE', name: 'Lune (Visible)', type: 'moon', ra: (280 + (d % 29.5) * 12) % 360, dec: 15.0, mag: -11.0, size_maj: 30.0, size_min: 30.0, surfMag: 5.0 }
             ];
-
-            // Soleil (référence)
-            const g = (357.529 + 0.9856003 * d) % 360;
-            const q = (280.459 + 0.98564736 * d) % 360;
-            const L_sun = (q + 1.915 * Math.sin(g * Math.PI/180) + 0.020 * Math.sin(2 * g * Math.PI/180)) % 360;
-            const sunRA = L_sun;
-            const sunDec = 23.44 * Math.sin(L_sun * Math.PI/180);
-
-            const results = [];
-
-            bodies.forEach(b => {
-                let M = (b.L - b.w + b.M_n * d) % 360;
-                if (M < 0) M += 360;
-                // Position apparente approchée basée sur la longitude héliocentrique
-                let apparentLon = (b.L + b.M_n * d * 50) % 360; 
-                if (apparentLon < 0) apparentLon += 360;
-
-                let ra = (sunRA + apparentLon) / 1.5; 
-                let dec = sunDec + (Math.sin(apparentLon * Math.PI/180) * 15);
-
-                results.push({
-                    id: b.id,
-                    name: b.name,
-                    type: b.type,
-                    ra: (ra + 360) % 360,
-                    dec: Math.max(-89, Math.min(89, dec)),
-                    mag: b.mag,
-                    size_maj: b.size / 60.0,
-                    size_min: b.size / 60.0,
-                    surfMag: 10.0
-                });
-            });
-
-            // Calcul de la Lune
-            let moonAge = (d % 29.53) / 29.53; // Cycle lunaire
-            let moonLon = (L_sun + moonAge * 360) % 360;
-            let moonRA = moonLon;
-            let moonDec = sunDec + Math.sin(moonLon * Math.PI/180) * 18;
-            let phasePercent = Math.round((1 - Math.cos(moonAge * 2 * Math.PI)) * 50);
-
-            results.push({
-                id: 'LUNE',
-                name: `Lune (${phasePercent}%)`,
-                type: 'moon',
-                ra: moonRA,
-                dec: Math.max(-89, Math.min(89, moonDec)),
-                mag: -11.0,
-                size_maj: 30.0, // ~30 minutes d'arc
-                size_min: 30.0,
-                surfMag: 5.0
-            });
-
-            return results;
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
             initDateSelector();
+            searchCity(); // Lance la recherche par défaut pour "Brest"
 
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
@@ -346,8 +351,8 @@
             const month = parseInt(document.getElementById('obsMonth').value);
             const year = parseInt(document.getElementById('obsYear').value);
 
-            const startStr = document.getElementById('startTime').value || "23:00";
-            const endStr = document.getElementById('endTime').value || "04:00";
+            const startStr = document.getElementById('startTime').value || "22:00";
+            const endStr = document.getElementById('endTime').value || "03:00";
 
             const [startH, startM] = startStr.split(':').map(Number);
             const [endH, endM] = endStr.split(':').map(Number);
@@ -364,7 +369,6 @@
         function processTargets(filter, lat, lon, minAlt) {
             const aperture = parseFloat(document.getElementById('aperture').value) || 150;
             const focal = parseFloat(document.getElementById('focal').value) || 750;
-            const bortle = parseInt(document.getElementById('bortle').value) || 8;
             const selectedType = document.getElementById('targetTypeFilter').value;
 
             const rawEyepieces = document.getElementById('eyepieces').value;
@@ -372,7 +376,6 @@
             if (eyepieces.length === 0) eyepieces.push(25);
 
             const { start: dateStart, mid: dateMid, end: dateEnd } = getObservationDates();
-
             const solarSystem = getSolarSystemBodies(dateMid);
             const combinedTargets = [...allTargets, ...solarSystem];
 
@@ -390,59 +393,33 @@
                 const maxAlt = Math.max(altStart, altMid, altEnd);
                 if (maxAlt < minAlt) return;
 
-                let bestTimeLabel = "Tout au long de la nuit";
-                if (altStart >= altMid && altStart >= altEnd && (altStart - altEnd) > 5) {
-                    bestTimeLabel = "Début de créneau";
-                } else if (altEnd >= altStart && altEnd >= altMid && (altEnd - altStart) > 5) {
-                    bestTimeLabel = "Fin de créneau";
-                } else if (altMid > altStart && altMid > altEnd) {
-                    bestTimeLabel = "Milieu de créneau";
+                let bestTimeLabel = "Milieu de nuit";
+                if (altStart >= altMid && altStart >= altEnd) bestTimeLabel = "Début de nuit";
+                if (altEnd >= altStart && altEnd >= altMid) bestTimeLabel = "Fin de nuit";
+
+                let bestEyepiece = eyepieces[0];
+                let bestMag = Math.round(focal / bestEyepiece);
+
+                let label = "Incontournable";
+                let reason = "Cible claire.";
+                if (target.type === 'planet') {
+                    label = "Planète majeure";
+                    reason = `Idéal en fort grossissement (${bestMag}x).`;
+                } else if (target.type === 'moon') {
+                    label = "Sélène / Lune";
+                    reason = "Détails des cratères visibles.";
                 }
 
-                let bestEyepiece = null;
-                let bestScore = 999;
-                let bestMag = 0;
-
-                eyepieces.forEach(ep => {
-                    const mag = focal / ep;
-                    let score = target.mag;
-                    if (target.type === 'planet' || target.type === 'moon') {
-                        const optimalMag = target.type === 'moon' ? 80 : aperture * 1.2;
-                        score = Math.abs(mag - optimalMag);
-                    }
-
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestEyepiece = ep;
-                        bestMag = Math.round(mag);
-                    }
+                processedTargets.push({
+                    ...target,
+                    alt: Math.round(maxAlt),
+                    bestTimeLabel: bestTimeLabel,
+                    bestEyepiece: bestEyepiece,
+                    difficultyLabel: label,
+                    difficultyClass: 'easy',
+                    reason: reason
                 });
-
-                if (bestEyepiece !== null) {
-                    let label = "Incontournable";
-                    let reason = "Cible claire.";
-                    if (target.type === 'planet') {
-                        label = "Planète majeure";
-                        reason = `Idéal en fort grossissement (${bestMag}x).`;
-                    } else if (target.type === 'moon') {
-                        label = "Sélène / Lune";
-                        reason = "Détails des cratères visibles.";
-                    }
-
-                    processedTargets.push({
-                        ...target,
-                        alt: Math.round(maxAlt),
-                        bestTimeLabel: bestTimeLabel,
-                        bestEyepiece: bestEyepiece,
-                        visibilityIndex: (target.type === 'planet' || target.type === 'moon') ? 0 : bestScore,
-                        difficultyLabel: label,
-                        difficultyClass: 'easy',
-                        reason: reason
-                    });
-                }
             });
-
-            processedTargets.sort((a, b) => a.visibilityIndex - b.visibilityIndex);
 
             document.getElementById('targetCount').innerText = processedTargets.length;
             const tbody = document.getElementById('targetList');
@@ -453,7 +430,7 @@
                 return;
             }
 
-            processedTargets.slice(0, 100).forEach(target => {
+            processedTargets.slice(0, 50).forEach(target => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><b>${target.id}</b></td>
@@ -480,17 +457,6 @@
 
             const filter = new TargetPlanner(aperture, focal, 25, bortle);
             processTargets(filter, userLat, userLon, minAlt);
-        }
-
-        function calculateVisibleTargets() {
-            if (allTargets.length === 0) {
-                alert("Chargement du catalogue en cours...");
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (pos) => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; recalculate(); },
-                (err) => { recalculate(); }
-            );
         }
     </script>
 </body>
