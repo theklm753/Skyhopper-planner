@@ -31,6 +31,8 @@
         .planet { background-color: #7b1fa2; color: #fff; }
         .moon { background-color: #c2185b; color: #fff; }
         .easy { color: #4caf50; font-weight: bold; }
+        .medium { color: #ffeb3b; font-weight: bold; }
+        .hard { color: #ff5252; font-weight: bold; }
         .eyepiece-badge { background-color: #333; border: 1px solid #ff5252; color: #ff5252; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px; }
         .time-badge { background-color: #222; border: 1px solid #4caf50; color: #4caf50; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
         .reason-text { font-size: 12px; color: #aaa; }
@@ -54,7 +56,7 @@
             <input type="text" id="citySearch" placeholder="ex: Paris, Brest, Marseille..." value="Paris">
             <button type="button" class="inline-btn" onclick="searchCity()">Rechercher</button>
         </div>
-        <div id="locationStatus">Lieu actif : Paris (Lat: 48.85, Lon: 2.35)</div>
+        <div id="locationStatus">Lieu actif : Paris (Lat: 48.85, Lon: 2.35)[cite: 1]</div>
 
         <button type="button" class="secondary" onclick="triggerGeo()">📍 Utiliser ma position GPS actuelle</button>
 
@@ -241,7 +243,6 @@
             );
         }
 
-        // --- Calcul robuste des planètes & Lune (Éphémérides astronomiques corrigées) ---
         function getSolarSystemBodies(date) {
             const JD = (date.getTime() / 86400000) + 2440587.5;
             const T = (JD - 2451545.0) / 36525.0;
@@ -443,20 +444,31 @@
                     if (maxAlt < minAlt) return;
                 }
 
+                // Utilisation de la logique d'évaluation de ton fichier de filtre externe
+                const evaluation = filter.evaluateTarget ? filter.evaluateTarget(target, maxAlt, eyepieces) : null;
+
                 let bestTimeLabel = "Milieu de nuit";
                 if (altStart >= altMid && altStart >= altEnd) bestTimeLabel = "Début de nuit";
                 if (altEnd >= altStart && altEnd >= altMid) bestTimeLabel = "Fin de nuit";
 
                 let bestEyepiece = eyepieces[0];
-                let bestMag = Math.round(focal / bestEyepiece);
+                let difficultyLabel = "Visible";
+                let difficultyClass = "easy";
+                let reason = "Cible accessible.";
 
-                let label = "Incontournable";
-                let reason = "Cible claire.";
-                if (target.type === 'planet') {
-                    label = "Planète majeure";
+                if (evaluation) {
+                    difficultyLabel = evaluation.label || difficultyLabel;
+                    difficultyClass = evaluation.className || difficultyClass;
+                    reason = evaluation.reason || reason;
+                    if (evaluation.bestEyepiece) bestEyepiece = evaluation.bestEyepiece;
+                } else if (target.type === 'planet') {
+                    difficultyLabel = "Planète majeure";
+                    difficultyClass = "easy";
+                    const bestMag = Math.round(focal / bestEyepiece);
                     reason = `Idéal en fort grossissement (${bestMag}x).`;
                 } else if (target.type === 'moon') {
-                    label = "Sélène / Lune";
+                    difficultyLabel = "Sélène / Lune";
+                    difficultyClass = "easy";
                     reason = "Détails des cratères visibles.";
                 }
 
@@ -465,8 +477,8 @@
                     alt: Math.round(maxAlt),
                     bestTimeLabel: bestTimeLabel,
                     bestEyepiece: bestEyepiece,
-                    difficultyLabel: label,
-                    difficultyClass: 'easy',
+                    difficultyLabel: difficultyLabel,
+                    difficultyClass: difficultyClass,
                     reason: reason
                 });
             });
