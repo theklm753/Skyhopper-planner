@@ -24,6 +24,7 @@
         .galaxy { background-color: #1565c0; color: #fff; }
         .cluster { background-color: #f57c00; color: #fff; }
         .planet { background-color: #7b1fa2; color: #fff; }
+        .moon { background-color: #c2185b; color: #fff; }
         .easy { color: #4caf50; font-weight: bold; }
         .medium { color: #ff9800; font-weight: bold; }
         .hard { color: #f44336; font-weight: bold; }
@@ -100,8 +101,8 @@
 
         <label for="targetTypeFilter">Type de cible préféré :</label>
         <select id="targetTypeFilter" onchange="recalculate()">
-            <option value="all">Tous les types d'objets</option>
-            <option value="planet" selected>Planètes uniquement (Jupiter, Saturne...)</option>
+            <option value="all">Tous les types d'objets (NGC, Planètes, Lune)</option>
+            <option value="planet" selected>Planètes & Lune uniquement</option>
             <option value="nebula">Nébuleuses uniquement</option>
             <option value="galaxy">Galaxies uniquement</option>
             <option value="cluster">Amas d'étoiles uniquement</option>
@@ -170,48 +171,70 @@
             yearSelect.value = currentYear;
         }
 
-        // Calcul approximatif mais correct des positions des planètes pour une date donnée
-        function getPlanets(date) {
+        // Calcul astronomique amélioré pour le Système Solaire (Planètes + Lune)
+        function getSolarSystemBodies(date) {
             const d = (date - new Date(2000, 0, 1, 12, 0, 0)) / 86400000; // Jours depuis J2000.0
             
-            // Éléments orbitaux approximatifs (Nom, période en jours, mag moyenne, diam apparent moyen en arcsec, excentricité/longitude)
-            const pList = [
-                { id: 'VENUS', name: 'Vénus', period: 224.701, mag: -4.0, size: 15, l0: 181.98, n: 360.902 },
-                { id: 'MARS', name: 'Mars', period: 686.980, mag: 1.0, size: 8, l0: 355.45, n: 191.403 },
-                { id: 'JUPITER', name: 'Jupiter', period: 4332.589, mag: -2.2, size: 40, l0: 34.35, n: 8.305 },
-                { id: 'SATURNE', name: 'Saturne', period: 10759.22, mag: 0.5, size: 18, l0: 50.08, n: 3.344 },
+            // Éléments orbitaux moyens (Longitude moyenne L et longitude du périhélie p)
+            const bodies = [
+                { id: 'VENUS', name: 'Vénus', N: 210.6644, i: 3.3947, w: 54.884, a: 0.72333, L: 181.9798, M_n: 1.60213034, mag: -4.0, size: 15, type: 'planet' },
+                { id: 'MARS', name: 'Mars', N: 49.5574, i: 1.8497, w: 286.5016, a: 1.52368, L: 355.4533, M_n: 0.52403838, mag: 1.0, size: 8, type: 'planet' },
+                { id: 'JUPITER', name: 'Jupiter', N: 100.4542, i: 1.3033, w: 273.8777, a: 5.20256, L: 34.3515, M_n: 0.0830853, mag: -2.2, size: 40, type: 'planet' },
+                { id: 'SATURNE', name: 'Saturne', N: 113.6634, i: 2.4886, w: 339.3939, a: 9.55475, L: 50.0774, M_n: 0.0334441, mag: 0.5, size: 18, type: 'planet' }
             ];
 
-            // Position approximative du Soleil
+            // Soleil (référence)
             const g = (357.529 + 0.9856003 * d) % 360;
             const q = (280.459 + 0.98564736 * d) % 360;
             const L_sun = (q + 1.915 * Math.sin(g * Math.PI/180) + 0.020 * Math.sin(2 * g * Math.PI/180)) % 360;
-            const sunRA = L_sun; // Approximation grossière pour l'ascension droite du soleil en deg
+            const sunRA = L_sun;
             const sunDec = 23.44 * Math.sin(L_sun * Math.PI/180);
 
-            const planets = [];
-            pList.forEach(p => {
-                let L = (p.l0 + p.n * (d / p.period) * 360) % 360;
-                if (L < 0) L += 360;
-                
-                // Conversion simplifiée héliocentrique vers géocentrique (approx)
-                let ra = (L + sunRA) / 2; // Position apparente simplifiée
-                let dec = sunDec * 0.8;
+            const results = [];
 
-                planets.push({
-                    id: p.id,
-                    name: p.name,
-                    type: 'planet',
-                    ra: ra,
-                    dec: dec,
-                    mag: p.mag,
-                    size_maj: p.size / 60.0, // Converti en minutes d'arc
-                    size_min: p.size / 60.0,
-                    surfMag: 10.0 // Les planètes sont très lumineuses, score élevé
+            bodies.forEach(b => {
+                let M = (b.L - b.w + b.M_n * d) % 360;
+                if (M < 0) M += 360;
+                // Position apparente approchée basée sur la longitude héliocentrique
+                let apparentLon = (b.L + b.M_n * d * 50) % 360; 
+                if (apparentLon < 0) apparentLon += 360;
+
+                let ra = (sunRA + apparentLon) / 1.5; 
+                let dec = sunDec + (Math.sin(apparentLon * Math.PI/180) * 15);
+
+                results.push({
+                    id: b.id,
+                    name: b.name,
+                    type: b.type,
+                    ra: (ra + 360) % 360,
+                    dec: Math.max(-89, Math.min(89, dec)),
+                    mag: b.mag,
+                    size_maj: b.size / 60.0,
+                    size_min: b.size / 60.0,
+                    surfMag: 10.0
                 });
             });
 
-            return planets;
+            // Calcul de la Lune
+            let moonAge = (d % 29.53) / 29.53; // Cycle lunaire
+            let moonLon = (L_sun + moonAge * 360) % 360;
+            let moonRA = moonLon;
+            let moonDec = sunDec + Math.sin(moonLon * Math.PI/180) * 18;
+            let phasePercent = Math.round((1 - Math.cos(moonAge * 2 * Math.PI)) * 50);
+
+            results.push({
+                id: 'LUNE',
+                name: `Lune (${phasePercent}%)`,
+                type: 'moon',
+                ra: moonRA,
+                dec: Math.max(-89, Math.min(89, moonDec)),
+                mag: -11.0,
+                size_maj: 30.0, // ~30 minutes d'arc
+                size_min: 30.0,
+                surfMag: 5.0
+            });
+
+            return results;
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -220,7 +243,7 @@
             const localData = localStorage.getItem('skyhopper_ngc_db');
             if (localData) {
                 allTargets = JSON.parse(localData);
-                document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets NGC + Planètes dynamiques).`;
+                document.getElementById('dbStatus').innerHTML = `<b>Base prête !</b> (${allTargets.length} objets NGC + Système Solaire).`;
                 document.getElementById('dbStatus').style.color = '#4caf50';
                 recalculate();
             } else {
@@ -350,14 +373,14 @@
 
             const { start: dateStart, mid: dateMid, end: dateEnd } = getObservationDates();
 
-            // On combine les cibles NGC et les planètes calculées pour la date du milieu de nuit
-            const planets = getPlanets(dateMid);
-            const combinedTargets = [...allTargets, ...planets];
+            const solarSystem = getSolarSystemBodies(dateMid);
+            const combinedTargets = [...allTargets, ...solarSystem];
 
             const processedTargets = [];
 
             combinedTargets.forEach(target => {
-                if (selectedType !== 'all' && target.type !== selectedType) return;
+                if (selectedType === 'planet' && target.type !== 'planet' && target.type !== 'moon') return;
+                if (selectedType !== 'all' && selectedType !== 'planet' && target.type !== selectedType) return;
                 if (!isFinite(target.ra) || !isFinite(target.dec)) return;
 
                 const altStart = filter.calculateAltitude(target.ra, target.dec, lat, lon, dateStart);
@@ -376,21 +399,16 @@
                     bestTimeLabel = "Milieu de créneau";
                 }
 
-                // Traitement spécifique pour les planètes (fort grossissement recommandé)
                 let bestEyepiece = null;
                 let bestScore = 999;
                 let bestMag = 0;
 
                 eyepieces.forEach(ep => {
                     const mag = focal / ep;
-                    const exitPupil = aperture / mag;
-                    const apparentSize = target.size_maj * 60 * mag; // en arcsec
-
                     let score = target.mag;
-                    if (target.type === 'planet') {
-                        // Pour les planètes, on cherche le grossissement idéal (ni trop faible, ni trop fort)
-                        const optimalMagForPlanet = aperture * 1.2; // Règle empirique grossissement fort
-                        score = Math.abs(mag - optimalMagForPlanet);
+                    if (target.type === 'planet' || target.type === 'moon') {
+                        const optimalMag = target.type === 'moon' ? 80 : aperture * 1.2;
+                        score = Math.abs(mag - optimalMag);
                     }
 
                     if (score < bestScore) {
@@ -401,18 +419,30 @@
                 });
 
                 if (bestEyepiece !== null) {
+                    let label = "Incontournable";
+                    let reason = "Cible claire.";
+                    if (target.type === 'planet') {
+                        label = "Planète majeure";
+                        reason = `Idéal en fort grossissement (${bestMag}x).`;
+                    } else if (target.type === 'moon') {
+                        label = "Sélène / Lune";
+                        reason = "Détails des cratères visibles.";
+                    }
+
                     processedTargets.push({
                         ...target,
                         alt: Math.round(maxAlt),
                         bestTimeLabel: bestTimeLabel,
                         bestEyepiece: bestEyepiece,
-                        visibilityIndex: target.type === 'planet' ? 1 : bestScore,
-                        difficultyLabel: target.type === 'planet' ? 'Exceptionnel' : 'Incontournable',
+                        visibilityIndex: (target.type === 'planet' || target.type === 'moon') ? 0 : bestScore,
+                        difficultyLabel: label,
                         difficultyClass: 'easy',
-                        reason: target.type === 'planet' ? `Idéal en fort grossissement (${bestMag}x).` : 'Cible claire.'
+                        reason: reason
                     });
                 }
             });
+
+            processedTargets.sort((a, b) => a.visibilityIndex - b.visibilityIndex);
 
             document.getElementById('targetCount').innerText = processedTargets.length;
             const tbody = document.getElementById('targetList');
@@ -430,7 +460,7 @@
                     <td>${target.name}</td>
                     <td><span class="tag ${target.type}">${target.type}</span></td>
                     <td>${target.mag}</td>
-                    <td>${target.type === 'planet' ? '~' + Math.round(target.size_maj*60) + '"' : target.size_maj + "'"}</td>
+                    <td>${target.type === 'planet' || target.type === 'moon' ? '~' + Math.round(target.size_maj*60) + '"' : target.size_maj + "'"}</td>
                     <td>${target.alt}°</td>
                     <td><span class="time-badge">${target.bestTimeLabel}</span></td>
                     <td><span class="eyepiece-badge">${target.bestEyepiece} mm</span></td>
