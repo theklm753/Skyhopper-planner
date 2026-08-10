@@ -101,10 +101,15 @@
 
         <label for="bortle">Indice de Bortle du ciel (1 à 9) :</label>
         <select id="bortle" onchange="recalculate()">
-            <option value="1">1 - Ciel exceptionnel</option>
+            <option value="1">1 - Ciel exceptionnel (noir absolu)</option>
+            <option value="2">2 - Vrai ciel noir de campagne</option>
             <option value="3" selected>3 - Ciel rural / Vacances</option>
-            <option value="5">5 - Ciel suburbain</option>
+            <option value="4">4 - Transition campagne / périurbain</option>
+            <option value="5">5 - Ciel de banlieue</option>
+            <option value="6">6 - Banlieue claire</option>
+            <option value="7">7 - Transition banlieue / ville</option>
             <option value="8">8 - Ciel de ville</option>
+            <option value="9">9 - Centre-ville très éclairé</option>
         </select>
 
         <label for="targetTypeFilter">Type de cible préféré :</label>
@@ -227,7 +232,6 @@
                     statusEl.innerText = "Recherche de votre adresse exacte...";
 
                     try {
-                        // Géocodage inversé pour retrouver le nom de la ville via les coordonnées GPS
                         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${userLat}&lon=${userLon}`);
                         const data = await response.json();
 
@@ -236,7 +240,6 @@
                             placeName = data.address.city || data.address.town || data.address.village || data.address.municipality || "Position GPS";
                         }
 
-                        // Remplace le texte dans la barre de recherche et actualise le statut
                         searchInput.value = placeName;
                         statusEl.innerHTML = `Lieu actif : <b>${placeName}</b> (Lat: ${userLat.toFixed(2)}, Lon: ${userLon.toFixed(2)})`;
                         statusEl.style.color = "#4caf50";
