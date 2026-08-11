@@ -6,7 +6,38 @@
     <title>SkyHopper - Planificateur de Cibles</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 15px; }
-        h1, h2 { color: #ff5252; }
+        
+        /* NOUVELLE BANNIÈRE */
+        .hero-banner {
+            background: linear-gradient(135deg, #0b0c10 0%, #171026 50%, #15243b 100%);
+            border-radius: 8px;
+            padding: 25px 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border: 1px solid #333;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            position: relative;
+            overflow: hidden;
+        }
+        /* Étoiles décoratives en CSS */
+        .hero-banner::before {
+            content: "✨ . * . ✦ . * . ✨ . * ✦";
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.15);
+            font-size: 24px;
+            letter-spacing: 15px;
+            pointer-events: none;
+        }
+        .banner-icon { font-size: 3.5rem; z-index: 2; line-height: 1; }
+        .banner-text { z-index: 2; }
+        .banner-text h1 { margin: 0; color: #ff5252; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); font-size: 2.2rem; }
+        .banner-text p { margin: 5px 0 0 0; color: #8bb1c9; font-style: italic; font-size: 1.1rem; }
+        
+        h2 { color: #ff5252; }
         .card { background-color: #1e1e1e; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; }
         label { display: block; margin-top: 10px; font-weight: bold; color: #bbb; }
         input, select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #444; background-color: #2a2a2a; color: #fff; box-sizing: border-box; }
@@ -35,7 +66,14 @@
 </head>
 <body>
 
-    <h1>Planificateur de Cibles SkyHopper</h1>
+    <!-- NOUVELLE BANNIÈRE INTÉGRÉE ICI -->
+    <div class="hero-banner">
+        <div class="banner-icon">🌌🔭🪐</div>
+        <div class="banner-text">
+            <h1>SkyHopper</h1>
+            <p>Planificateur de Cibles Astronomiques</p>
+        </div>
+    </div>
 
     <div class="card" style="border: 1px solid #444;">
         <h2>Catalogue & Éphémérides</h2>
@@ -45,7 +83,6 @@
     <div class="card">
         <h2>Paramètres de l'observateur</h2>
 
-        <!-- NOUVEAU BLOC : LOCALISATION ET GPS -->
         <label for="citySearch">Rechercher une ville / un lieu :</label>
         <div style="display: flex; gap: 5px; margin-top: 5px;">
             <input type="text" id="citySearch" placeholder="ex: Paris, Brest, Toulouse..." value="Paris">
@@ -150,7 +187,6 @@
         let userLat = 48.85;
         let userLon = 2.35;
 
-        // --- NOUVELLES FONCTIONS DE LOCALISATION ---
         async function searchCity() {
             const query = document.getElementById('citySearch').value.trim();
             if (!query) return;
@@ -205,7 +241,6 @@
                 }
             );
         }
-        // ---------------------------------------------
 
         function initDateSelector() {
             const daySelect = document.getElementById('obsDay');
@@ -317,7 +352,6 @@
                     typeRaw.includes('emn')
                 ) {
                     type = 'nebula';
-                // --- CORRECTION DU BUG NGC 6205 ---
                 } else if (
                     typeRaw === 'g' || 
                     typeRaw.includes('galaxy') || 
@@ -358,7 +392,6 @@
             return targets;
         }
 
-        // --- NOUVELLE FONCTION : ÉPHÉMÉRIDES DES PLANÈTES ---
         function getSolarSystemBodies(date) {
             const JD = (date.getTime() / 86400000) + 2440587.5;
             const T = (JD - 2451545.0) / 36525.0;
@@ -445,7 +478,6 @@
 
             const { start: dateStart, mid: dateMid, end: dateEnd } = getObservationDates();
 
-            // --- INTÉGRATION DES PLANÈTES SANS TOUCHER AUX RÈGLES ---
             const solarSystem = getSolarSystemBodies(dateMid);
             const combinedTargets = [...allTargets, ...solarSystem];
 
@@ -497,7 +529,6 @@
                     const skyDimming = exitPupil < 7.0 ? 5 * Math.log10(7.0 / exitPupil) : 0;
                     const maxSurfMagAllowed = (baseSkySurfMag + skyDimming) + 2.5;
 
-                    // Les planètes bypassent uniquement ces 2 critères qui pénaliseraient leur très petite taille
                     if (target.type !== 'cluster' && !isPlanet && target.surfMag > maxSurfMagAllowed) return;
                     if (apparentSize < 20.0 && target.type !== 'cluster' && !isPlanet) return;
 
@@ -521,7 +552,6 @@
                 });
 
                 if (bestEyepiece !== null) {
-                    // --- TA LOGIQUE INTACTE DE DIAGNOSTIC ---
                     let difficultyLabel = "Incontournable";
                     let difficultyClass = "easy";
                     let reason = `Taille et clarté optimales (${bestMag}x).`;
