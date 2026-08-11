@@ -21,25 +21,31 @@ class TargetPlanner {
         this.instrumentalMagLimit = this.nelm + 5 * Math.log10(this.aperture / 6.0);
     }
 
-    calculateAltitude(raDeg, decDeg, lat, lon) {
-        const now = new Date();
-        // Calcul simplifié de la hauteur
-        const d = (now.getTime() / 86400000) - 10957.5;
+    // CORRECTION : Ajout de l'argument dateObj (par défaut Date actuelle si non fourni)
+    calculateAltitude(raDeg, decDeg, lat, lon, dateObj = new Date()) {
+        // d est le nombre de jours (et fraction de jour) depuis J2000.0 (1er Janvier 2000 à 12h UTC)
+        // 2451545.0 (J2000) - 2440587.5 (Unix epoch) = 10957.5 jours.
+        const d = (dateObj.getTime() / 86400000) - 10957.5;
+
+        // Temps Sidéral de Greenwich (GST) puis Temps Sidéral Local (LST) en degrés
         const lst = (280.46061837 + 360.98564736629 * d + lon) % 360;
+        
+        // Angle Horaire (HA)
         const ha = ((lst - raDeg) + 360) % 360;
         
         const haRad = ha * Math.PI / 180;
         const decRad = decDeg * Math.PI / 180;
         const latRad = lat * Math.PI / 180;
 
+        // Trigonometrie sphérique exacte pour la hauteur (Altitude)
         const sinAlt = Math.sin(decRad) * Math.sin(latRad) + Math.cos(decRad) * Math.cos(latRad) * Math.cos(haRad);
         return Math.asin(sinAlt) * 180 / Math.PI;
     }
 
-    filterTargets(targets, lat, lon, minAlt) {
+    filterTargets(targets, lat, lon, minAlt, dateObj = new Date()) {
         return targets.filter(target => {
-            // 1. Hauteur au-dessus de l'horizon
-            const alt = this.calculateAltitude(target.ra, target.dec, lat, lon);
+            // 1. Hauteur au-dessus de l'horizon pour la date donnée
+            const alt = this.calculateAltitude(target.ra, target.dec, lat, lon, dateObj);
             if (alt < minAlt) return false;
 
             // 2. Magnitude limite globale
@@ -51,7 +57,6 @@ class TargetPlanner {
 
             // 4. Seuil de brillance surfacique vs ciel (pour objets étendus)
             if (target.surfMag && target.type !== 'cluster') {
-                // Si l'objet est plus sombre que le ciel + 2.5 mag, il est invisible en visuel
                 if (target.surfMag > (this.skySurfMag + 2.5)) return false;
             }
 
